@@ -1,0 +1,27 @@
+services:
+  web:
+    image: wanxve0000/jellyfin-manager:latest
+    env_file:
+      - ./.env
+    environment:
+      - RESTIC_HOST=jellyfin-manager
+    ports:
+      - "18080:18080"
+    volumes:
+      - ./data:/data
+      - /srv/jellyfin:/srv/jellyfin
+      - /root/.config/rclone:/root/.config/rclone
+    restart: unless-stopped
+
+  telegram_admin_bot:
+    image: wanxve0000/jellyfin-manager:latest
+    env_file:
+      - ./.env
+    environment:
+      - JM_MANAGER_URL=http://web:18080
+    volumes:
+      - ./data:/data
+    depends_on:
+      - web
+    command: python -u -m jm_manager.telegram_admin_bot
+    restart: unless-stopped

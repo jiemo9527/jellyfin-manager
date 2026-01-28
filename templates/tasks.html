@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block header_title %}任务日志{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 gap-6 lg:h-[calc(100vh-140px)] mobile-compact">
+    <div class="flex items-center justify-end animate-fade-in mobile-compact-actions" style="animation-delay: 0.1s;">
+        <form action="/tasks/logs/clear" method="POST">
+            <input type="hidden" name="category" value="all">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-danger/10 hover:bg-danger/20 border border-danger/20 text-sm text-danger">清空全部日志</button>
+        </form>
+    </div>
+    <div class="space-y-6 animate-fade-in" style="animation-delay: 0.15s;">
+        {% for cat in log_categories %}
+        <div class="glass-panel rounded-xl overflow-hidden log-panel" data-log-panel="1">
+            <div class="px-6 py-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/30 log-panel-header mobile-compact-header">
+                <h3 class="font-bold text-white">{{ cat.name }}日志</h3>
+                <form action="/tasks/logs/clear" method="POST">
+                    <input type="hidden" name="category" value="{{ cat.key }}">
+                    <button type="submit" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-white">清空</button>
+                </form>
+            </div>
+            <div class="max-h-64 overflow-y-auto p-4 font-mono text-xs space-y-1 log-panel-body">
+                {% for line in log_groups[cat.key] %}
+                <div class="hover:bg-white/5 px-2 py-0.5 rounded transition-colors break-all text-slate-300 border-l-2 {% if 'ERROR' in line %}border-danger text-red-200{% elif 'WARNING' in line %}border-warning text-yellow-200{% else %}border-transparent{% endif %}">
+                    {{ line }}
+                </div>
+                {% else %}
+                <div class="text-slate-500">暂无日志</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const panels = document.querySelectorAll('.log-panel');
+        const body = document.body;
+
+        const closeAll = () => {
+            panels.forEach(panel => panel.classList.remove('log-panel-fullscreen'));
+            body.classList.remove('log-panel-open');
+        };
+
+        panels.forEach(panel => {
+            panel.addEventListener('dblclick', () => {
+                const isOpen = panel.classList.contains('log-panel-fullscreen');
+                closeAll();
+                if (!isOpen) {
+                    panel.classList.add('log-panel-fullscreen');
+                    body.classList.add('log-panel-open');
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAll();
+            }
+        });
+    });
+</script>
+
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block header_title %}集群流量统计{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto pb-12 mobile-compact">
+    <details class="glass-panel rounded-xl overflow-hidden animate-fade-in" open>
+        <summary class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between cursor-pointer select-none mobile-compact-header">
+            <div>
+                <h3 class="font-bold text-white">流量与重置时间</h3>
+                <div class="text-xs text-slate-500 mt-1">上海时区显示，数据来源 64clouds API</div>
+            </div>
+            <div class="text-xs text-slate-500">点击收起</div>
+        </summary>
+
+        <div class="px-6 py-3 border-b border-slate-700/50 flex items-center justify-end mobile-compact-actions">
+            <button type="button" onclick="refreshServers()" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-white mobile-compact-btn">刷新</button>
+        </div>
+
+        <div class="p-0">
+            <table class="w-full text-left border-collapse mobile-compact-table">
+                <thead>
+                    <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-800/20">
+                        <th class="px-6 py-3 font-medium uppercase">标记</th>
+                        <th class="px-6 py-3 font-medium uppercase">IP 地址</th>
+                        <th class="px-6 py-3 font-medium uppercase">流量使用</th>
+                        <th class="px-6 py-3 font-medium uppercase">使用百分比</th>
+                        <th class="px-6 py-3 font-medium uppercase">重置时间</th>
+                        <th class="px-6 py-3 font-medium uppercase">数据中心</th>
+                    </tr>
+                </thead>
+                <tbody id="server-stream-body" class="text-sm font-mono text-slate-300">
+                    <tr>
+                        <td colspan="6" class="px-6 py-8 text-center text-slate-500">加载中...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </details>
+
+    <div class="mt-4 text-xs text-slate-500">
+        已保存：{{ server_marks|length }} 台{% if server_marks %}（{{ server_marks|join('，') }}）{% endif %}
+    </div>
+
+    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mt-6" style="animation-delay: 0.1s;">
+        <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between mobile-compact-header">
+            <div>
+                <h3 class="font-bold text-white">nslookup {{ ns_host }}</h3>
+                <div class="text-xs text-slate-500 mt-1">实时解析结果</div>
+            </div>
+        </div>
+        <div class="px-6 py-4 border-b border-slate-700/50">
+            <form action="/server-stream" method="GET" class="flex flex-col md:flex-row gap-3">
+                <input type="text" name="host" value="{{ ns_host }}" class="w-full md:w-80 bg-slate-800/50 border border-slate-700 focus:border-warning focus:ring-1 focus:ring-warning rounded-lg px-4 py-2 text-sm text-white transition-all font-mono" placeholder="0vid.de">
+                <button type="submit" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-white">查询</button>
+            </form>
+        </div>
+        <div class="p-4">
+            <pre class="text-xs font-mono text-slate-300 whitespace-pre-wrap">{{ nslookup_result }}</pre>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function refreshServers() {
+        const body = document.getElementById('server-stream-body');
+            body.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500">加载中...</td></tr>';
+            try {
+                const res = await fetch('/api/server-stream', { headers: { 'Accept': 'application/json' } });
+                const data = await res.json();
+                if (!data || !data.ok) {
+                    body.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-red-300">加载失败</td></tr>';
+                    return;
+                }
+                const items = Array.isArray(data.items) ? data.items : [];
+                if (!items.length) {
+                    body.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500">暂无服务器数据，请先在 /settings 配置</td></tr>';
+                    return;
+                }
+                body.innerHTML = items.map(it => (
+                    `<tr class="border-b border-slate-700/30 table-row-hover">`
+                    + `<td class="px-6 py-3 text-white">${it.mark || '-'}</td>`
+                    + `<td class="px-6 py-3">${it.ip || '-'}</td>`
+                    + `<td class="px-6 py-3">${it.traffic || '-'}</td>`
+                    + `<td class="px-6 py-3">${it.percent || '-'}</td>`
+                    + `<td class="px-6 py-3">${it.reset_time || '-'}</td>`
+                    + `<td class="px-6 py-3">${it.data_center || '-'}</td>`
+                    + `</tr>`
+                )).join('');
+            } catch (e) {
+                body.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-red-300">加载失败</td></tr>';
+            }
+        }
+
+    document.addEventListener('DOMContentLoaded', refreshServers);
+</script>
+{% endblock %}

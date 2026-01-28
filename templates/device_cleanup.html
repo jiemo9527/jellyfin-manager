@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block header_title %}设备清理{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto pb-12 mobile-compact">
+    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in">
+        <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between mobile-compact-header">
+            <div>
+                <h3 class="font-bold text-white">设备清理与预览</h3>
+                <div class="text-xs text-slate-500 mt-1">支持不活跃天数与关键字筛选</div>
+            </div>
+        </div>
+
+        <div class="p-6 border-b border-slate-700/50">
+            <form action="/device-cleanup" method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input type="hidden" name="cleanup" value="1">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">不活跃天数</label>
+                    <input type="number" name="days" value="{{ cleanup_params.days }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono" placeholder="40">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">关键字</label>
+                    <input type="text" name="keywords" value="{{ cleanup_params.keywords }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono" placeholder="library, webos">
+                    <div class="text-xs text-slate-500 mt-1">匹配设备名或 AppName</div>
+                </div>
+
+                <div class="md:col-span-3 flex flex-wrap gap-3 mobile-compact-actions">
+                    <button type="submit" class="px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm text-white">预览列表</button>
+                    <button type="submit" formmethod="POST" formaction="/device-cleanup/execute" class="px-4 py-2.5 rounded-lg bg-danger/10 hover:bg-danger/20 border border-danger/20 text-sm text-danger">执行删除</button>
+                    <div class="text-xs text-slate-500">按不活跃天数与关键字筛选。</div>
+                </div>
+            </form>
+
+            {% if cleanup_error %}
+            <div class="mt-4 text-xs text-danger">{{ cleanup_error }}</div>
+            {% endif %}
+
+            {% if cleanup_done %}
+            <div class="mt-4 text-xs text-success">已执行删除：{{ cleanup_deleted }} 条</div>
+            {% endif %}
+        </div>
+
+        <div class="p-0">
+            <table class="w-full text-left border-collapse mobile-compact-table">
+                <thead>
+                    <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-800/20">
+                        <th class="px-6 py-3 font-medium uppercase">设备</th>
+                        <th class="px-6 py-3 font-medium uppercase">AppName</th>
+                        <th class="px-6 py-3 font-medium uppercase">最后活跃</th>
+                        <th class="px-6 py-3 font-medium uppercase">原因</th>
+                    </tr>
+                </thead>
+                <tbody class="text-sm font-mono text-slate-300">
+                    {% if cleanup_preview %}
+                        {% for item in cleanup_preview %}
+                        <tr class="border-b border-slate-700/30 table-row-hover">
+                            <td class="px-6 py-3 text-white">{{ item.name }}</td>
+                            <td class="px-6 py-3">{{ item.app }}</td>
+                            <td class="px-6 py-3">{{ item.last }}</td>
+                            <td class="px-6 py-3">{{ item.reason }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="4" class="px-6 py-8 text-center text-slate-500">暂无预览数据</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

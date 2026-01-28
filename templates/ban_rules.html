@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block header_title %}分流规则配置{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex flex-col md:flex-row md:justify-between md:items-end gap-4 animate-fade-in mobile-compact">
+    <div class="mobile-compact-header">
+        <h2 class="text-lg font-bold text-white mb-1">智能分流矩阵</h2>
+        <p class="text-sm text-slate-400">配置每个用户的服务器访问权限。勾选 = <span class="text-success font-bold">允许</span>，未勾选 = <span class="text-danger font-bold">禁止</span>。</p>
+        <p class="text-xs text-slate-500 mt-1">分组来源：startj。未保存过规则时：专线用户默认全放行；普通用户默认只放行“直连后端”“其他类型”。</p>
+    </div>
+    <div class="flex flex-col md:flex-row gap-3 w-full md:w-auto mobile-compact-actions">
+        <form action="/ban-rules/monitor-toggle" method="POST">
+            <input type="hidden" name="enabled" value="{{ '0' if ban_rules_enabled else '1' }}">
+            <button type="submit" class="px-5 py-2.5 rounded-lg text-sm font-medium border transition-all w-full md:w-auto mobile-compact-btn {% if ban_rules_enabled %}bg-danger/10 hover:bg-danger/20 border-danger/20 text-danger{% else %}bg-success/10 hover:bg-success/20 border-success/20 text-success{% endif %}">
+                {% if ban_rules_enabled %}停止监控{% else %}恢复监控{% endif %}
+            </button>
+        </form>
+        <button type="submit" form="rules-form" class="bg-primary hover:bg-primary-hover text-white font-medium rounded-lg text-sm px-6 py-2.5 flex items-center justify-center md:justify-start transition-all shadow-lg shadow-primary/20 w-full md:w-auto mobile-compact-btn">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+            保存并应用规则
+        </button>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 gap-6 ban-rules-scroll">
+    <!-- Realtime Logs (Top on mobile) -->
+    <div class="animate-fade-in order-1" style="animation-delay: 0.15s;">
+        <details class="glass-panel rounded-xl overflow-hidden" id="banlog-details">
+            <summary class="px-5 py-4 cursor-pointer select-none flex items-center justify-between bg-slate-800/40 border-b border-slate-700/50">
+                <div class="flex items-center space-x-3">
+                    <span class="text-white font-bold">分流规则实时日志</span>
+                    <span class="text-xs font-mono text-slate-500">data/banuser.log</span>
+                </div>
+                <span class="text-slate-500">展开/收起</span>
+            </summary>
+            <div class="p-4 bg-[#0d1117]">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="text-xs text-slate-500">每 2 秒刷新（上海时间显示）。</div>
+                    <div class="flex items-center space-x-2">
+                        <button type="button" onclick="banLogRefreshOnce()" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-white">刷新</button>
+                        <button type="button" onclick="banLogToggle()" id="banlog-toggle" class="px-3 py-1.5 rounded bg-primary/10 hover:bg-primary/20 border border-primary/20 text-xs text-primary">暂停</button>
+                        <button type="button" onclick="banLogClear()" class="px-3 py-1.5 rounded bg-danger/10 hover:bg-danger/20 border border-danger/20 text-xs text-danger">清空</button>
+                    </div>
+                </div>
+                <div id="banlog-meta" class="text-xs text-slate-500 mb-3">日志源：data/banuser.log</div>
+                <div id="banlog-box" class="max-h-64 md:max-h-80 lg:max-h-[520px] overflow-y-auto font-mono text-xs space-y-1">
+                    <div class="text-slate-500">(加载中...)</div>
+                </div>
+            </div>
+        </details>
+    </div>
+
+    <!-- Rule Matrix (Collapsible by group) -->
+    <div class="space-y-3 animate-fade-in order-2" style="animation-delay: 0.1s;">
+        <form id="rules-form" action="/ban-rules/save" method="POST" class="space-y-3">
+            {% for category, urls in servers.items() %}
+            <details class="glass-panel rounded-xl overflow-hidden" {% if loop.first %}open{% endif %}>
+                <summary class="px-5 py-4 cursor-pointer select-none flex items-center justify-between bg-slate-800/40 border-b border-slate-700/50">
+                    <div class="flex items-center space-x-3">
+                        <span class="text-white font-bold">{{ category }}</span>
+                        <span class="text-xs font-mono text-slate-500">{{ urls|length }} 线路</span>
+                    </div>
+                    <span class="text-slate-500">展开/收起</span>
+                </summary>
+
+                <div class="overflow-x-auto ban-rules-table-wrap">
+                    <table class="w-full text-left border-collapse min-w-[640px] md:min-w-[800px] mobile-compact-table">
+                        <thead>
+                            <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-900/30">
+                                <th class="px-4 py-3 sticky left-0 z-10 bg-slate-900/80 border-r border-slate-700 min-w-[160px]">
+                                    <div class="font-bold uppercase tracking-wider">用户</div>
+                                </th>
+                                {% for url in urls %}
+                                <th class="px-2 py-3 text-center min-w-[120px] border-r border-slate-700/30">
+                                    <div class="text-[10px] font-mono text-slate-500 break-all cursor-help" title="{{ url }}">
+                                        {{ url|replace('https://', '')|replace('http://','')|truncate(24, True, '...') }}
+                                    </div>
+                                    <div class="mt-2 flex justify-center space-x-1">
+                                        <button type="button" onclick="toggleColumn('{{ url }}', true)" class="text-[10px] px-1 bg-slate-700 hover:bg-success hover:text-white rounded text-slate-400 transition-colors">全</button>
+                                        <button type="button" onclick="toggleColumn('{{ url }}', false)" class="text-[10px] px-1 bg-slate-700 hover:bg-danger hover:text-white rounded text-slate-400 transition-colors">无</button>
+                                    </div>
+                                </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm divide-y divide-slate-700/30">
+                            {% for user in users %}
+                            <tr class="hover:bg-slate-800/30 transition-colors">
+                                <td class="px-4 py-3 sticky left-0 z-10 bg-card border-r border-slate-700 font-medium text-white flex items-center justify-between group">
+                                    <span>{{ user }}</span>
+                                    <div class="opacity-0 group-hover:opacity-100 flex space-x-1">
+                                        <button type="button" onclick="toggleRow('{{ user }}', true)" class="text-[10px] text-success hover:underline">全开</button>
+                                        <button type="button" onclick="toggleRow('{{ user }}', false)" class="text-[10px] text-danger hover:underline">全禁</button>
+                                    </div>
+                                </td>
+                                {% for url in urls %}
+                                <td class="px-2 py-3 text-center border-r border-slate-700/30">
+                                    <input type="checkbox"
+                                           name="rule_{{ user }}_{{ url }}"
+                                           class="industrial-checkbox"
+                                           data-user="{{ user }}"
+                                           data-url="{{ url }}"
+                                           {% if user in rules and url not in rules[user] %}checked{% endif %}
+                                           {% if user not in rules %}checked{% endif %}>
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            {% endfor %}
+        </form>
+    </div>
+
+</div>
+
+<script>
+    function toggleColumn(url, state) {
+        document.querySelectorAll(`input[data-url="${url}"]`).forEach(cb => {
+            cb.checked = state;
+        });
+    }
+
+    function toggleRow(user, state) {
+        document.querySelectorAll(`input[data-user="${user}"]`).forEach(cb => {
+            cb.checked = state;
+        });
+    }
+
+    let banlogRunning = true;
+    async function banLogRefreshOnce() {
+        try {
+            const res = await fetch('/ban-rules/logs', { headers: { 'Accept': 'application/json' } });
+            const data = await res.json();
+            const box = document.getElementById('banlog-box');
+            const meta = document.getElementById('banlog-meta');
+            if (!data || !data.ok) {
+                box.innerHTML = `<div class="text-red-200">获取失败：${data && data.error ? data.error : res.status}</div>`;
+                return;
+            }
+            const lines = Array.isArray(data.lines) ? data.lines : [];
+            const mgr = Array.isArray(data.manager_lines) ? data.manager_lines : [];
+            const mtime = data.mtime ? new Date(data.mtime * 1000) : null;
+            const mtimeText = mtime ? mtime.toLocaleString('zh-CN', { hour12: false }) : '未知';
+            if (meta) {
+                meta.textContent = `日志源：${data.path || 'data/banuser.log'} | exists=${data.exists} size=${data.size || 0}B | mtime=${mtimeText} | 行数=${data.line_count || 0} | 规则日志=${data.manager_line_count || 0}`;
+            }
+            if ((!data.exists || data.size === 0) && mgr.length === 0 && lines.length === 0) {
+                box.innerHTML = `<div class="text-slate-500">暂无日志：请确认 banuser worker 正常运行（${data.path || 'data/banuser.log'}）</div>`;
+                return;
+            }
+
+            const render = (l) => {
+                const cls = (l.includes('ERROR') ? 'text-red-200 border-danger' : (l.includes('WARNING') ? 'text-yellow-200 border-warning' : 'text-slate-300 border-transparent'));
+                return `<div class="hover:bg-white/5 px-2 py-0.5 rounded transition-colors break-all border-l-2 ${cls}">${String(l).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
+            }
+
+            const parts = [];
+            if (mgr.length) {
+                parts.push(`<div class="text-slate-500 px-2 py-1">--- jm_manager (ban*) ---</div>`);
+                parts.push(mgr.map(render).join(''));
+            }
+            if (lines.length) {
+                parts.push(`<div class="text-slate-500 px-2 py-1">--- data/banuser.log ---</div>`);
+                parts.push(lines.map(render).join(''));
+            }
+            box.innerHTML = parts.join('');
+        } catch (e) {
+            const box = document.getElementById('banlog-box');
+            box.innerHTML = `<div class="text-red-200">获取失败：${e}</div>`;
+        }
+    }
+
+    function banLogToggle() {
+        banlogRunning = !banlogRunning;
+        const btn = document.getElementById('banlog-toggle');
+        btn.textContent = banlogRunning ? '暂停' : '继续';
+    }
+
+    async function banLogClear() {
+        if (!confirm('确定要清空日志吗？')) return;
+        try {
+            const res = await fetch('/ban-rules/logs/clear', { method: 'POST', headers: { 'Accept': 'application/json' } });
+            const data = await res.json();
+            if (!data || !data.ok) {
+                alert('清空失败');
+                return;
+            }
+            banLogRefreshOnce();
+        } catch (e) {
+            alert('清空失败');
+        }
+    }
+
+    setInterval(() => {
+        if (banlogRunning) banLogRefreshOnce();
+    }, 2000);
+    banLogRefreshOnce();
+</script>
+{% endblock %}

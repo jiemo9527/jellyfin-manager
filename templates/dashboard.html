@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block header_title %}概览{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 animate-fade-in">
+    <!-- Stat Card 1 -->
+    <div class="glass-panel p-6 rounded-xl relative overflow-hidden group hover:border-primary/50 transition-colors">
+        <div class="absolute right-0 top-0 h-24 w-24 bg-primary/10 rounded-full -mr-6 -mt-6 group-hover:bg-primary/20 transition-colors"></div>
+        <div class="relative">
+            <div class="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">总用户数</div>
+            <div class="text-3xl font-bold font-mono text-white">{{ stats.total_users }}</div>
+            <div class="mt-2 text-xs text-primary flex items-center">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                <span>活跃中</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Card 2 -->
+    <div class="glass-panel p-6 rounded-xl relative overflow-hidden group hover:border-warning/50 transition-colors">
+        <div class="absolute right-0 top-0 h-24 w-24 bg-warning/10 rounded-full -mr-6 -mt-6 group-hover:bg-warning/20 transition-colors"></div>
+        <div class="relative">
+            <div class="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">即将到期 (3天内)</div>
+            <div class="text-3xl font-bold font-mono text-white">{{ stats.expiring_soon }}</div>
+            <div class="mt-2 text-xs text-warning flex items-center">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>需关注</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Card 3 -->
+    <div class="glass-panel p-6 rounded-xl relative overflow-hidden group hover:border-danger/50 transition-colors">
+        <div class="absolute right-0 top-0 h-24 w-24 bg-danger/10 rounded-full -mr-6 -mt-6 group-hover:bg-danger/20 transition-colors"></div>
+        <div class="relative">
+            <div class="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">已禁用</div>
+            <div class="text-3xl font-bold font-mono text-white">{{ stats.disabled_users }}</div>
+            <div class="mt-2 text-xs text-danger flex items-center">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+                <span>访问受限</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Card 4 -->
+    <div class="glass-panel p-6 rounded-xl relative overflow-hidden group hover:border-emerald-500/50 transition-colors">
+        <div class="absolute right-0 top-0 h-24 w-24 bg-emerald-500/10 rounded-full -mr-6 -mt-6 group-hover:bg-emerald-500/20 transition-colors"></div>
+        <div class="relative">
+            <div class="text-slate-400 text-sm font-medium uppercase tracking-wider mb-1">备份状态</div>
+            <div class="text-3xl font-bold font-mono text-white">
+                {% if backup_summary.running %}运行中{% elif backup_summary.last_status == 'success' %}成功{% elif backup_summary.last_status == 'failed' %}失败{% else %}未运行{% endif %}
+            </div>
+            <div class="mt-2 text-xs text-emerald-400 flex items-center">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>{{ backup_summary.last_run or '—' }}</span>
+            </div>
+            <div class="mt-2 text-[11px] text-slate-500">分流规则总数：{{ stats.active_rules }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 animate-fade-in" style="animation-delay: 0.05s;">
+        <div class="glass-panel p-6 rounded-xl">
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">快捷操作</h3>
+            <div class="space-y-3">
+                <a href="/audit" class="w-full flex items-center justify-between p-4 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all group">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-warning/10 text-warning rounded-lg mr-3 group-hover:bg-warning group-hover:text-white transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h6M9 17H7a2 2 0 01-2-2V7a2 2 0 012-2h10a2 2 0 012 2v4M9 17l3 3m0 0l3-3m-3 3V12"></path></svg>
+                        </div>
+                        <div class="text-left">
+                            <div class="font-bold text-white text-sm">用户审计</div>
+                            <div class="text-xs text-slate-500">发现未纳管用户</div>
+                        </div>
+                    </div>
+                    <span class="text-slate-500 group-hover:text-white">&rarr;</span>
+                </a>
+                <a href="/audit?sync=1" class="w-full flex items-center justify-between p-4 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all group">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-primary/10 text-primary rounded-lg mr-3 group-hover:bg-primary group-hover:text-white transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        </div>
+                        <div class="text-left">
+                            <div class="font-bold text-white text-sm">同步用户</div>
+                            <div class="text-xs text-slate-500">去用户审计&同步确认</div>
+                        </div>
+                    </div>
+                    <span class="text-slate-500 group-hover:text-white">&rarr;</span>
+                </a>
+
+            <div class="p-4 rounded-lg bg-slate-800/60 border border-slate-700">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">媒体库扫描</div>
+                {% if scan_items and scan_items|length > 0 %}
+                <div class="grid grid-cols-2 gap-2">
+                    {% for item in scan_items %}
+                    <form action="/tasks/library-scan/{{ item.code }}" method="POST">
+                        <button type="submit" class="w-full px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-medium text-white transition-colors">
+                            {{ item.name }}
+                        </button>
+                    </form>
+                    {% endfor %}
+                    <form action="/tasks/scan" method="POST">
+                        <button type="submit" class="w-full px-3 py-2 rounded-lg bg-warning/10 hover:bg-warning/20 border border-warning/20 text-sm font-medium text-warning transition-colors">
+                            全库
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="text-xs text-slate-500">尚未配置扫描库。请在 /settings 的“媒体库扫描列表”添加名称与 ID。</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-panel p-6 rounded-xl">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">备份任务</h3>
+            <span class="text-xs font-mono text-slate-500">{{ backup_info.time }}</span>
+        </div>
+        <div class="space-y-2 text-sm mb-4">
+            <div class="flex justify-between">
+                <span class="text-slate-500">状态</span>
+                <span class="font-mono text-white">
+                    {% if backup_info.running %}运行中{% elif backup_info.last_status == 'success' %}成功{% elif backup_info.last_status == 'failed' %}失败{% else %}未运行{% endif %}
+                </span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-slate-500">最近一次</span>
+                <span class="font-mono text-white">{{ backup_info.last_run or '—' }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-slate-500">仓库</span>
+                <span class="font-mono text-primary text-xs">{{ backup_info.repo or '未配置' }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-slate-500">目录</span>
+                <span class="font-mono text-white text-xs">{{ backup_info.source_dir or '未配置' }}</span>
+            </div>
+        </div>
+        <form action="/tasks/backup" method="POST">
+            <button type="submit" class="w-full px-4 py-2.5 rounded-lg bg-primary/10 hover:bg-primary/20 border border-primary/20 text-sm font-medium text-primary transition-colors">
+                立即备份
+            </button>
+        </form>
+        <div class="mt-3 text-xs text-slate-500">
+            默认每日 {{ backup_info.time }} 执行，可在 /settings 修改。
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">备份策略</div>
+            <form action="/tasks/backup-settings" method="POST" class="space-y-3">
+                <label class="inline-flex items-center text-sm text-slate-300">
+                    <input type="checkbox" name="backup_enabled" class="w-4 h-4 rounded bg-slate-800 border-slate-700 text-primary focus:ring-primary focus:ring-offset-slate-900 transition-colors cursor-pointer" {% if backup_info.enabled %}checked{% endif %}>
+                    <span class="ml-2">启用自动备份</span>
+                </label>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">每日执行时间</label>
+                    <input type="time" name="backup_time" value="{{ backup_info.time }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-3 py-2 text-sm text-white transition-all font-mono">
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">daily</label>
+                        <input type="number" name="backup_keep_daily" value="{{ backup_info.keep_daily }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-2 py-1.5 text-xs text-white transition-all font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">weekly</label>
+                        <input type="number" name="backup_keep_weekly" value="{{ backup_info.keep_weekly }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-2 py-1.5 text-xs text-white transition-all font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">monthly</label>
+                        <input type="number" name="backup_keep_monthly" value="{{ backup_info.keep_monthly }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-2 py-1.5 text-xs text-white transition-all font-mono">
+                    </div>
+                </div>
+                <button type="submit" class="w-full px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-medium text-white transition-colors">
+                    保存备份策略
+                </button>
+            </form>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-700/50">
+            <div class="flex items-center justify-between mb-2">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">已备份列表</div>
+                <button type="button" onclick="loadSnapshots()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-white">刷新</button>
+            </div>
+            <div class="max-h-56 overflow-y-auto">
+                <table class="w-full text-left text-xs">
+                    <thead>
+                        <tr class="text-[10px] text-slate-500 border-b border-slate-700/50">
+                            <th class="py-1 pr-2">时间</th>
+                            <th class="py-1 pr-2">ID</th>
+                            <th class="py-1 pr-2">主机</th>
+                            <th class="py-1">路径</th>
+                        </tr>
+                    </thead>
+                    <tbody id="backup-snapshots" class="text-slate-300">
+                        <tr><td colspan="4" class="py-3 text-center text-slate-500">点击刷新获取列表</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity / Logs Preview -->
+<div class="glass-panel rounded-xl overflow-hidden animate-fade-in" style="animation-delay: 0.1s;">
+    <div class="px-6 py-4 border-b border-slate-700/50 flex justify-between items-center">
+        <h3 class="font-bold text-white">系统动态</h3>
+        <a href="/tasks" class="text-xs text-primary hover:text-white transition-colors">查看全部 &rarr;</a>
+    </div>
+    <div class="p-0">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-800/20">
+                    <th class="px-6 py-3 font-medium uppercase">时间</th>
+                    <th class="px-6 py-3 font-medium uppercase">级别</th>
+                    <th class="px-6 py-3 font-medium uppercase">消息</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm font-mono text-slate-300">
+                {% for log in recent_logs %}
+                <tr class="border-b border-slate-700/30 table-row-hover">
+                    <td class="px-6 py-3 text-slate-500">{{ log.time }}</td>
+                    <td class="px-6 py-3">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold 
+                            {% if log.level == 'ERROR' %}bg-danger/20 text-danger
+                            {% elif log.level == 'WARNING' %}bg-warning/20 text-warning
+                            {% else %}bg-success/20 text-success{% endif %}">
+                            {{ log.level }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-3">{{ log.message }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="px-6 py-8 text-center text-slate-500">暂无最新日志数据</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mt-6 glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.12s;">
+    <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">环境信息</h3>
+    <div class="space-y-2 text-sm">
+        <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
+            <span class="text-slate-500">Python</span>
+            <span class="font-mono text-white">{{ env_info.python_version }}</span>
+        </div>
+        <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
+            <span class="text-slate-500">平台</span>
+            <span class="font-mono text-white">{{ env_info.platform }}</span>
+        </div>
+        <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
+            <span class="text-slate-500">Jellyfin URL</span>
+            <span class="font-mono text-primary text-xs">{{ env_info.jellyfin_url }}</span>
+        </div>
+        <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
+            <span class="text-slate-500">服务器时间</span>
+            <span class="font-mono text-white">{{ env_info.server_time }}</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadSnapshots() {
+        const body = document.getElementById('backup-snapshots');
+        if (!body) return;
+        body.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-slate-500">加载中...</td></tr>';
+        try {
+            const res = await fetch('/tasks/backup/snapshots', { headers: { 'Accept': 'application/json' } });
+            const data = await res.json();
+            if (!data || !data.ok) {
+                body.innerHTML = `<tr><td colspan="4" class="py-3 text-center text-red-300">加载失败${data && data.error ? ': ' + data.error : ''}</td></tr>`;
+                return;
+            }
+            const items = Array.isArray(data.items) ? data.items : [];
+            if (!items.length) {
+                body.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-slate-500">暂无备份记录</td></tr>';
+                return;
+            }
+            body.innerHTML = items.map(it => (
+                `<tr class="border-b border-slate-700/30">`
+                + `<td class="py-1 pr-2 text-slate-400">${it.time || '-'}</td>`
+                + `<td class="py-1 pr-2 font-mono">${it.id || '-'}</td>`
+                + `<td class="py-1 pr-2">${it.host || '-'}</td>`
+                + `<td class="py-1">${it.paths || '-'}</td>`
+                + `</tr>`
+            )).join('');
+        } catch (e) {
+            body.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-red-300">加载失败</td></tr>';
+        }
+    }
+</script>
+{% endblock %}

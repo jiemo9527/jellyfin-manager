@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block header_title %}用户管理{% endblock %}
+
+{% block content %}
+{% set plan_color_map = {
+    '1': 'plan-badge plan-sky',
+    '2': 'plan-badge plan-emerald',
+    '3': 'plan-badge plan-indigo',
+    '4': 'plan-badge plan-amber',
+    '5': 'plan-badge plan-rose',
+    '6': 'plan-badge plan-fuchsia',
+    '7': 'plan-badge plan-teal',
+    '8': 'plan-badge plan-cyan'
+} %}
+<div class="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center mb-6 animate-fade-in mobile-compact">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 w-full">
+        <div class="relative max-w-sm w-full">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg class="h-4 w-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <input type="text" id="user-search" class="bg-card border border-slate-700 text-white text-sm rounded-lg focus:ring-primary focus:border-primary block w-full pl-10 p-2.5 placeholder-slate-500" placeholder="搜索用户名或套餐...">
+        </div>
+        <div class="flex items-center space-x-2">
+            <label class="text-xs text-slate-500">排序</label>
+            <select id="user-sort" class="bg-card border border-slate-700 text-white text-sm rounded-lg px-3 py-2.5">
+                <option value="" {% if not sort_key %}selected{% endif %}>默认</option>
+                <option value="name_asc" {% if sort_key == 'name_asc' %}selected{% endif %}>首字母 A→Z</option>
+                <option value="name_desc" {% if sort_key == 'name_desc' %}selected{% endif %}>首字母 Z→A</option>
+                <option value="reg_desc" {% if sort_key == 'reg_desc' %}selected{% endif %}>加入时间 新→旧</option>
+                <option value="reg_asc" {% if sort_key == 'reg_asc' %}selected{% endif %}>加入时间 旧→新</option>
+                <option value="plan_asc" {% if sort_key == 'plan_asc' %}selected{% endif %}>套餐类型 A→Z</option>
+                <option value="plan_desc" {% if sort_key == 'plan_desc' %}selected{% endif %}>套餐类型 Z→A</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="flex space-x-3 mobile-compact-actions">
+        <a href="/users/export" class="bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg text-sm px-5 py-2.5 flex items-center transition-all border border-slate-700">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12"></path></svg>
+            导出 JSON
+        </a>
+        <a href="/users/import" class="bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg text-sm px-5 py-2.5 flex items-center transition-all border border-slate-600">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            导入 users.json
+        </a>
+        <button onclick="document.getElementById('create-modal').classList.remove('hidden')" class="bg-primary hover:bg-primary-hover text-white font-medium rounded-lg text-sm px-5 py-2.5 flex items-center transition-all shadow-lg shadow-primary/20">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            新建用户
+        </button>
+    </div>
+</div>
+
+<div class="glass-panel rounded-xl overflow-hidden animate-fade-in mobile-compact" style="animation-delay: 0.1s;">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse mobile-compact-table">
+            <thead>
+                <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-800/40">
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">状态</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">用户名</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">套餐</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">注册时间</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">到期时间</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider text-right">操作</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm divide-y divide-slate-700/30">
+                {% for user in users %}
+                <tr class="group hover:bg-slate-800/30 transition-colors">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            {% if user.status == 'active' %}
+                                <span class="status-dot status-active"></span>
+                                <span class="text-slate-300">活跃</span>
+                            {% else %}
+                                <span class="status-dot status-disabled"></span>
+                                <span class="text-slate-400">禁用</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 font-medium text-white">{{ user.username }}</td>
+                    <td class="px-6 py-4">
+                        {% set plan_key = user.plan_id|string %}
+                        {% set plan_class = plan_color_map.get(plan_key, 'plan-badge plan-default') %}
+                        <span class="px-2 py-1 rounded text-xs {{ plan_class }}">
+                            {{ user.plan_name }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 font-mono text-slate-400 text-xs">
+                        {{ user.registration_date|replace('T', ' ')|truncate(16, True, '') }}
+                    </td>
+                    <td class="px-6 py-4 font-mono text-xs {% if user.days_left <= 3 and user.status == 'active' %}text-warning font-bold{% else %}text-slate-400{% endif %}">
+                        {{ user.expiration_date|replace('T', ' ')|truncate(16, True, '') }}
+                        {% if user.days_left <= 3 and user.status == 'active' %}
+                        <span class="ml-1">⚠</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-right space-x-2">
+                        {% if user.is_admin %}
+                        <span class="px-2 py-1 rounded text-[10px] bg-warning/10 text-warning border border-warning/20 uppercase tracking-wide">管理员</span>
+                        {% else %}
+                        <button onclick="openPlanModal('{{ user.jellyfin_id }}', '{{ user.username }}', '{{ user.plan_id }}')" class="text-slate-300 hover:text-white transition-colors text-xs font-medium uppercase tracking-wide">改套餐</button>
+                        <button onclick="openExtendModal('{{ user.jellyfin_id }}', '{{ user.username }}')" class="text-primary hover:text-white transition-colors text-xs font-medium uppercase tracking-wide">续期</button>
+                         
+                        {% if user.status == 'active' %}
+                        <form action="/users/disable" method="POST" class="inline">
+                            <input type="hidden" name="user_id" value="{{ user.jellyfin_id }}">
+                            <button type="submit" class="text-warning hover:text-white transition-colors text-xs font-medium uppercase tracking-wide">禁用</button>
+                        </form>
+                        {% else %}
+                        <form action="/users/enable" method="POST" class="inline">
+                            <input type="hidden" name="user_id" value="{{ user.jellyfin_id }}">
+                            <button type="submit" class="text-success hover:text-white transition-colors text-xs font-medium uppercase tracking-wide">启用</button>
+                        </form>
+                        {% endif %}
+
+                        <button onclick="confirmDelete('{{ user.jellyfin_id }}', '{{ user.username }}')" class="text-danger hover:text-white transition-colors text-xs font-medium uppercase tracking-wide">删除</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Create Modal -->
+<div id="create-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div class="bg-card w-full max-w-md rounded-xl border border-slate-700 shadow-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">创建新用户</h3>
+        <form action="/users/create" method="POST" class="space-y-4">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 uppercase mb-1">用户名</label>
+                <input type="text" name="username" required class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-primary outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 uppercase mb-1">密码</label>
+                <input type="text" name="password" required class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-primary outline-none font-mono">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 uppercase mb-1">套餐类型</label>
+                <select name="plan_id" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-primary outline-none appearance-none">
+                    {% for pid, plan in plans.items() %}
+                    <option value="{{ pid }}">{{ plan.name }} ({{ plan.duration_days }}天)</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button type="button" onclick="document.getElementById('create-modal').classList.add('hidden')" class="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">取消</button>
+                <button type="submit" class="bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">确认创建</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Extend Modal -->
+<div id="extend-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div class="bg-card w-full max-w-sm rounded-xl border border-slate-700 shadow-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-2">续期用户</h3>
+        <p class="text-sm text-slate-400 mb-4">用户: <span id="extend-username" class="text-white font-mono"></span></p>
+        <form action="/users/extend" method="POST" class="space-y-4">
+            <input type="hidden" name="user_id" id="extend-userid">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 uppercase mb-1">延长天数</label>
+                <input type="number" name="days" value="30" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-primary outline-none font-mono">
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button type="button" onclick="document.getElementById('extend-modal').classList.add('hidden')" class="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">取消</button>
+                <button type="submit" class="bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">确认续期</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Plan Modal -->
+<div id="plan-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div class="bg-card w-full max-w-sm rounded-xl border border-slate-700 shadow-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-2">修改套餐</h3>
+        <p class="text-sm text-slate-400 mb-4">用户: <span id="plan-username" class="text-white font-mono"></span></p>
+        <form action="/users/plan" method="POST" class="space-y-4">
+            <input type="hidden" name="user_id" id="plan-userid">
+            <div>
+                <label class="block text-xs font-medium text-slate-400 uppercase mb-1">套餐类型</label>
+                <select name="plan_id" id="plan-planid" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-primary outline-none appearance-none">
+                    {% for pid, plan in plans.items() %}
+                    <option value="{{ pid }}">{{ plan.name }} ({{ plan.duration_days }}天)</option>
+                    {% endfor %}
+                </select>
+                <p class="text-[10px] text-slate-500 mt-1">仅修改套餐类型，不会自动改动到期时间。</p>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button type="button" onclick="document.getElementById('plan-modal').classList.add('hidden')" class="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">取消</button>
+                <button type="submit" class="bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openExtendModal(uid, username) {
+        document.getElementById('extend-userid').value = uid;
+        document.getElementById('extend-username').textContent = username;
+        document.getElementById('extend-modal').classList.remove('hidden');
+    }
+
+    function openPlanModal(uid, username, planId) {
+        document.getElementById('plan-userid').value = uid;
+        document.getElementById('plan-username').textContent = username;
+        const sel = document.getElementById('plan-planid');
+        if (sel) sel.value = String(planId || '2');
+        document.getElementById('plan-modal').classList.remove('hidden');
+    }
+
+    function confirmDelete(uid, username) {
+        if(confirm(`警告：确定要永久删除用户 ${username} 吗？此操作无法撤销！`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/users/delete';
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'user_id';
+            input.value = uid;
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    // Simple search filter
+    document.getElementById('user-search').addEventListener('keyup', function(e) {
+        const val = e.target.value.toLowerCase();
+        const rows = document.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const text = row.innerText.toLowerCase();
+            row.style.display = text.includes(val) ? '' : 'none';
+        });
+    });
+
+    const sortSelect = document.getElementById('user-sort');
+    const sortStorageKey = 'jm_user_sort';
+    const currentUrl = new URL(window.location.href);
+    const currentSort = currentUrl.searchParams.get('sort') || '';
+    if (!currentSort) {
+        const savedSort = localStorage.getItem(sortStorageKey);
+        if (savedSort) {
+            currentUrl.searchParams.set('sort', savedSort);
+            window.location.replace(currentUrl.toString());
+        }
+    } else {
+        localStorage.setItem(sortStorageKey, currentSort);
+    }
+
+    if (sortSelect) {
+        sortSelect.addEventListener('change', () => {
+            const url = new URL(window.location.href);
+            const val = sortSelect.value || '';
+            if (val) {
+                url.searchParams.set('sort', val);
+                localStorage.setItem(sortStorageKey, val);
+            } else {
+                url.searchParams.delete('sort');
+                localStorage.removeItem(sortStorageKey);
+            }
+            window.location.href = url.toString();
+        });
+    }
+</script>
+{% endblock %}

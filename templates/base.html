@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>Jellyfin Manager | Control Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: 'var(--bg-dark)',
+                        card: 'var(--bg-card)',
+                        primary: 'var(--primary)',
+                        danger: 'var(--danger)',
+                        success: 'var(--success)',
+                        warning: 'var(--warning)'
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['"Manrope"', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-dark text-slate-200 h-screen flex overflow-hidden selection:bg-primary selection:text-white">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar w-56 bg-card border-r border-slate-700/50 flex flex-col z-20 shadow-xl">
+        <div class="h-16 flex items-center px-6 border-b border-slate-700/50">
+            <div class="h-8 w-8 bg-primary/20 rounded-lg flex items-center justify-center mr-3">
+                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <span class="font-bold text-lg tracking-tight">JF Manager</span>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-4 space-y-1">
+            <a href="/" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
+                <svg class="w-5 h-5 mr-3 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                <span class="text-sm font-medium">仪表盘</span>
+            </a>
+
+            <div class="px-6 mt-6 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">用户管理</div>
+            
+            <a href="/users" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
+                <svg class="w-5 h-5 mr-3 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                <span class="text-sm font-medium">用户列表</span>
+            </a>
+            
+            <a href="/audit" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
+                <svg class="w-5 h-5 mr-3 group-hover:text-warning transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                <span class="text-sm font-medium">用户审计&同步</span>
+                <span id="untracked-badge" class="ml-auto bg-warning/20 text-warning text-xs font-mono py-0.5 px-2 rounded hidden">0</span>
+            </a>
+
+            <div class="px-6 mt-6 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">系统控制</div>
+
+            <a href="/ban-rules" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
+                <svg class="w-5 h-5 mr-3 group-hover:text-danger transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+                <span class="text-sm font-medium">分流规则</span>
+            </a>
+
+            <a href="/server-stream" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
+                <svg class="w-5 h-5 mr-3 group-hover:text-warning transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"></path></svg>
+                <span class="text-sm font-medium">集群流量统计</span>
+            </a>
+
+            <a href="/device-cleanup" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
+                <svg class="w-5 h-5 mr-3 group-hover:text-warning transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M4 10h16M5 14h14M6 18h12"></path></svg>
+                <span class="text-sm font-medium">设备清理</span>
+            </a>
+
+            <a href="#" onclick="return false;" class="nav-link flex items-center px-6 py-3 text-slate-500 hover:text-slate-500 hover:bg-slate-700/10 transition-colors group cursor-not-allowed">
+                <svg class="w-5 h-5 mr-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h6l5 5v12a2 2 0 01-2 2z"></path></svg>
+                <span class="text-sm font-medium">API 管理（待实现）</span>
+            </a>
+
+            <a href="/tasks" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
+                <svg class="w-5 h-5 mr-3 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                <span class="text-sm font-medium">任务日志</span>
+            </a>
+
+            <a href="/settings" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
+                <svg class="w-5 h-5 mr-3 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span class="text-sm font-medium">设置</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-slate-700/50">
+            <div class="flex items-center space-x-3">
+                <div class="h-10 w-10 rounded-full bg-gradient-to-tr from-slate-600 to-slate-500 flex items-center justify-center text-xs font-bold text-white">
+                    ADM
+                </div>
+                <div>
+                    <div class="text-sm font-medium text-white">Administrator</div>
+                    <div class="text-xs text-slate-500">Online</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative min-h-0">
+        <!-- Top Bar -->
+        <header class="h-16 border-b border-slate-700/50 bg-dark/50 backdrop-blur-md flex items-center justify-between px-4 md:px-8 z-10">
+            <div class="flex items-center space-x-3">
+                <button id="sidebar-toggle" class="lg:hidden p-2 rounded-lg border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-800/50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+                <h1 class="text-xl font-bold text-white tracking-tight">
+                {% block header_title %}仪表盘{% endblock %}
+                </h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-slate-500">主题</span>
+                    <select id="theme-select" class="bg-slate-800/60 border border-slate-700 text-xs text-white rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary">
+                        <option value="ocean">深海青</option>
+                        <option value="ember">熔岩橙</option>
+                        <option value="forest">松林绿</option>
+                        <option value="sand">沙漠金</option>
+                    </select>
+                </div>
+                <button id="light-toggle" class="px-2 py-1 rounded-md border border-slate-700 text-xs text-slate-300 hover:text-white hover:bg-slate-800/50">
+                    开灯
+                </button>
+                <span class="flex h-3 w-3 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success/50 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-success"></span>
+                </span>
+                <span class="text-xs font-mono text-slate-400">jfmanager {{ app_version }}</span>
+            </div>
+        </header>
+
+        <!-- Content Scroll Area -->
+        <div class="flex-1 overflow-auto p-4 md:p-8 min-h-0 scroll-area">
+            {% block content %}{% endblock %}
+            <div class="page-bottom-spacer"></div>
+        </div>
+    </main>
+
+    <script>
+        // Simple active link highlighter
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentPath = window.location.pathname;
+            document.querySelectorAll('.nav-link').forEach(link => {
+                if(link.getAttribute('href') === currentPath) {
+                    link.classList.add('active');
+                }
+            });
+
+            const key = 'jm_theme';
+            const select = document.getElementById('theme-select');
+            const saved = localStorage.getItem(key) || 'ocean';
+            document.documentElement.setAttribute('data-theme', saved);
+            if (select) {
+                select.value = saved;
+                select.addEventListener('change', () => {
+                    const val = select.value || 'ocean';
+                    document.documentElement.setAttribute('data-theme', val);
+                    localStorage.setItem(key, val);
+                });
+            }
+
+            const lightKey = 'jm_lights';
+            const lightToggle = document.getElementById('light-toggle');
+            const setLight = (on) => {
+                document.body.classList.toggle('lights-on', on);
+                if (lightToggle) {
+                    lightToggle.textContent = on ? '关灯' : '开灯';
+                }
+            };
+            const lightSaved = localStorage.getItem(lightKey);
+            setLight(lightSaved === 'on');
+            if (lightToggle) {
+                lightToggle.addEventListener('click', () => {
+                    const on = !document.body.classList.contains('lights-on');
+                    setLight(on);
+                    localStorage.setItem(lightKey, on ? 'on' : 'off');
+                });
+            }
+
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebarOverlay = document.getElementById('sidebar-overlay');
+            const toggleSidebar = () => {
+                document.body.classList.toggle('sidebar-open');
+            };
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', toggleSidebar);
+            }
+            if (sidebarOverlay) {
+                sidebarOverlay.addEventListener('click', () => {
+                    document.body.classList.remove('sidebar-open');
+                });
+            }
+        });
+    </script>
+</body>
+</html>

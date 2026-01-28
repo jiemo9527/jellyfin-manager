@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block header_title %}用户审计&同步{% endblock %}
+
+{% block content %}
+<div class="audit-compact">
+{% if sync_done %}
+<div class="mb-6 animate-fade-in mobile-compact">
+    <div class="glass-panel rounded-xl px-5 py-4 border border-success/20 bg-success/10">
+        <div class="text-sm text-success font-semibold">同步完成</div>
+        <div class="text-xs text-slate-400 mt-1">已应用变更数：{{ sync_changed or '0' }}</div>
+    </div>
+</div>
+{% endif %}
+
+<div class="mb-6 animate-fade-in mobile-compact">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h2 class="text-lg font-bold text-white mb-1">用户状态同步</h2>
+            <p class="text-sm text-slate-400">对比 Jellyfin 与管理器的用户名/禁用状态，确认后再同步。</p>
+        </div>
+        <a href="/audit?sync=1" class="bg-primary/10 hover:bg-primary text-primary hover:text-white px-4 py-2 rounded text-sm font-bold transition-all border border-primary/20 hover:border-primary">
+            同步用户状态
+        </a>
+    </div>
+</div>
+
+{% if sync_mode %}
+    {% if sync_changes %}
+    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mobile-compact" style="animation-delay: 0.05s;">
+        <div class="px-6 py-4 border-b border-slate-700/50 bg-slate-800/40 flex items-center justify-between mobile-compact-header">
+            <div class="text-sm font-bold text-white">待同步变更（{{ sync_changes|length }}）</div>
+            <form action="/audit/sync/confirm" method="POST">
+                <button type="submit" class="bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">确认同步</button>
+            </form>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse mobile-compact-table">
+                <thead>
+                    <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-800/30">
+                        <th class="px-6 py-3 font-medium uppercase tracking-wider">Jellyfin ID</th>
+                        <th class="px-6 py-3 font-medium uppercase tracking-wider">用户名</th>
+                        <th class="px-6 py-3 font-medium uppercase tracking-wider">状态</th>
+                    </tr>
+                </thead>
+                <tbody class="text-sm divide-y divide-slate-700/30">
+                    {% for item in sync_changes %}
+                    <tr class="group hover:bg-slate-800/30 transition-colors">
+                        <td class="px-6 py-3 font-mono text-xs text-slate-500">{{ item.jellyfin_id }}</td>
+                        <td class="px-6 py-3">
+                            <div class="text-white">{{ item.db_username or '未知' }}</div>
+                            <div class="text-xs text-slate-500">→ {{ item.jf_username or '未知' }}</div>
+                        </td>
+                        <td class="px-6 py-3">
+                            <div class="text-slate-300 text-xs">{{ item.db_status }} → {{ item.jf_status }}</div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="flex flex-col items-center justify-center h-40 glass-panel rounded-xl animate-fade-in" style="animation-delay: 0.05s;">
+        <div class="h-12 w-12 bg-success/10 rounded-full flex items-center justify-center mb-3">
+            <svg class="w-6 h-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        </div>
+        <div class="text-white font-bold">无需同步</div>
+        <div class="text-xs text-slate-500 mt-1">当前用户状态与 Jellyfin 一致。</div>
+    </div>
+    {% endif %}
+
+    <div class="my-10 border-t border-slate-700/50"></div>
+{% endif %}
+
+{% if missing_users %}
+<div class="mb-6 animate-fade-in mobile-compact">
+    <h2 class="text-lg font-bold text-white mb-1">管理器异常：Jellyfin 不存在</h2>
+    <p class="text-sm text-slate-400">以下用户存在于管理器数据库，但在 Jellyfin 服务器上已找不到（可能被手动删除或服务切换）。</p>
+</div>
+
+    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mobile-compact" style="animation-delay: 0.05s;">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse mobile-compact-table">
+            <thead>
+                <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-800/40">
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">Jellyfin ID</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">用户名</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">套餐</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">到期时间</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm divide-y divide-slate-700/30">
+                {% for u in missing_users %}
+                <tr class="group hover:bg-slate-800/30 transition-colors">
+                    <td class="px-6 py-4 font-mono text-xs text-slate-500">{{ u.jellyfin_id }}</td>
+                    <td class="px-6 py-4 font-medium text-white">{{ u.username }}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-xs bg-slate-700 text-slate-300 border border-slate-600">{{ u.plan_name }}</span>
+                    </td>
+                    <td class="px-6 py-4 font-mono text-slate-400 text-xs">{{ u.expiration_date|replace('T', ' ')|truncate(16, True, '') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="my-10 border-t border-slate-700/50"></div>
+{% endif %}
+
+<div class="mb-6 animate-fade-in mobile-compact">
+    <h2 class="text-lg font-bold text-white mb-1">未追踪用户</h2>
+    <p class="text-sm text-slate-400">以下用户存在于 Jellyfin 服务器但未在管理器数据库中。添加到管理器以启用自动过期和封禁规则。</p>
+</div>
+
+{% if untracked_users %}
+<div class="glass-panel rounded-xl overflow-hidden animate-fade-in mobile-compact" style="animation-delay: 0.1s;">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse mobile-compact-table">
+            <thead>
+                <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-800/40">
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">Jellyfin ID</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">用户名</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider">最后活动</th>
+                    <th class="px-6 py-4 font-medium uppercase tracking-wider text-right">操作</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm divide-y divide-slate-700/30">
+                {% for user in untracked_users %}
+                <tr class="group hover:bg-slate-800/30 transition-colors">
+                    <td class="px-6 py-4 font-mono text-xs text-slate-500">{{ user.Id }}</td>
+                    <td class="px-6 py-4 font-medium text-white">{{ user.Name }}</td>
+                    <td class="px-6 py-4 text-slate-400 text-xs">{{ user.LastActivityDate|default('从未', true)|replace('T', ' ')|truncate(16, True, '') }}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="openAddModal('{{ user.Id }}', '{{ user.Name }}')" class="bg-primary/10 hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded text-xs font-bold transition-all uppercase tracking-wide border border-primary/20 hover:border-primary">
+                            纳入管理
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="flex flex-col items-center justify-center h-64 glass-panel rounded-xl animate-fade-in">
+    <div class="h-16 w-16 bg-success/10 rounded-full flex items-center justify-center mb-4">
+        <svg class="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+    </div>
+    <h3 class="text-white font-bold text-lg">系统已同步</h3>
+    <p class="text-slate-500 text-sm mt-1">所有 Jellyfin 用户均已在管理列表中。</p>
+    <a href="/users" class="mt-4 text-primary text-sm hover:underline">返回用户列表 &rarr;</a>
+</div>
+{% endif %}
+
+<!-- Add Modal -->
+<div id="add-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+    <div class="bg-card w-full max-w-md rounded-xl border border-slate-700 shadow-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-2">添加用户到管理器</h3>
+        <p class="text-sm text-slate-400 mb-4">正在添加: <span id="add-username" class="text-white font-mono font-bold"></span></p>
+        
+        <form action="/audit/add" method="POST" class="space-y-4">
+            <input type="hidden" name="jellyfin_id" id="add-userid">
+            <input type="hidden" name="username" id="add-username-hidden">
+            
+            <div>
+                <label class="block text-xs font-medium text-slate-400 uppercase mb-1">选择套餐</label>
+                <select name="plan_id" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-primary outline-none appearance-none">
+                    {% for pid, plan in plans.items() %}
+                    <option value="{{ pid }}">{{ plan.name }} ({{ plan.duration_days }}天)</option>
+                    {% endfor %}
+                </select>
+                <p class="text-[10px] text-slate-500 mt-1">这将决定用户的过期时间计算方式。</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-slate-400 uppercase mb-1">服务起始时间</label>
+                <input type="datetime-local" name="registration_date" id="reg-date" required class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white focus:border-primary outline-none font-mono text-sm">
+                <p class="text-[10px] text-slate-500 mt-1">默认为当前时间。过期时间将基于此时间 + 套餐时长自动计算。</p>
+            </div>
+
+            <div class="flex justify-end space-x-3 mt-6">
+                <button type="button" onclick="document.getElementById('add-modal').classList.add('hidden')" class="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">取消</button>
+                <button type="submit" class="bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">确认添加</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openAddModal(uid, username) {
+        document.getElementById('add-userid').value = uid;
+        document.getElementById('add-username').textContent = username;
+        document.getElementById('add-username-hidden').value = username;
+        
+        // Set default datetime to now (local)
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('reg-date').value = now.toISOString().slice(0, 16);
+        
+        document.getElementById('add-modal').classList.remove('hidden');
+    }
+</script>
+</div>
+{% endblock %}
