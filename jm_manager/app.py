@@ -1747,6 +1747,36 @@ async def settings_post(
     return RedirectResponse(url="/settings?saved=1", status_code=303)
 
 
+@app.post("/settings/stream-servers/delete")
+def settings_stream_server_delete(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    rt: RuntimeSettings = Depends(get_runtime_settings),
+    delete_veid: str = Form(""),
+    next_url: str = Form(""),
+) -> Any:
+    try:
+        require_session(rt, request)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+
+    veid = str(delete_veid or "").strip()
+    redirect_url = str(next_url or "").strip()
+    if not redirect_url.startswith("/") or redirect_url.startswith("//"):
+        redirect_url = "/settings?saved=1"
+    if not veid:
+        return RedirectResponse(url="/settings?error=缺少服务器标识", status_code=303)
+
+    existing = _load_stream_servers(_db(settings))
+    remaining = [item for item in existing if str(item.get("veid") or "").strip() != veid]
+    if len(remaining) == len(existing):
+        return RedirectResponse(url="/settings?error=未找到对应服务器配置", status_code=303)
+
+    _save_stream_servers(_db(settings), remaining)
+    _append_log(f"[系统] 流量监控服务器已删除 veid={veid} remaining={len(remaining)}")
+    return RedirectResponse(url=redirect_url, status_code=303)
+
+
 @app.post("/settings/export")
 def settings_export(
     request: Request,
@@ -1764,7 +1794,7 @@ def settings_export(
         return RedirectResponse(url="/settings?error=导出失败: 需要设置导出密码", status_code=302)
 
     try:
-        import pyzipper  # type: ignore
+        pyzipper = __import__("pyzipper")
     except Exception:
         return RedirectResponse(url="/settings?error=导出失败: 未安装 pyzipper", status_code=302)
 
@@ -1801,7 +1831,7 @@ async def settings_import(
         return RedirectResponse(url="/settings?error=导入失败: 需要导入密码", status_code=302)
 
     try:
-        import pyzipper  # type: ignore
+        pyzipper = __import__("pyzipper")
     except Exception:
         return RedirectResponse(url="/settings?error=导入失败: 未安装 pyzipper", status_code=302)
 
@@ -2121,7 +2151,7 @@ async def users_import_post(
     db = _db(settings)
     existing = {str(u.get("jellyfin_id")) for u in db_list_users(db) if u.get("jellyfin_id")}
 
-    report = {
+    report: dict[str, Any] = {
         "total": len(payload),
         "created": 0,
         "updated": 0,
@@ -3104,6 +3134,7 @@ def server_stream_page(
         "server_stream.html",
         {
             "request": request,
+            "stream_servers": servers,
             "server_marks": marks,
             "nslookup_result": nslookup_result,
             "ns_host": ns_host,

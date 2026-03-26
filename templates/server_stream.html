@@ -42,6 +42,48 @@
         已保存：{{ server_marks|length }} 台{% if server_marks %}（{{ server_marks|join('，') }}）{% endif %}
     </div>
 
+    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mt-6" style="animation-delay: 0.05s;">
+        <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between mobile-compact-header">
+            <div>
+                <h3 class="font-bold text-white">已保存服务器管理</h3>
+                <div class="text-xs text-slate-500 mt-1">删除单项会同步更新服务器流量监控配置</div>
+            </div>
+            <a href="/settings" class="text-xs text-warning hover:text-white transition-colors">去设置追加</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse mobile-compact-table">
+                <thead>
+                    <tr class="text-xs text-slate-500 border-b border-slate-700/50 bg-slate-800/20">
+                        <th class="px-6 py-3 font-medium uppercase">标记</th>
+                        <th class="px-6 py-3 font-medium uppercase">VEID</th>
+                        <th class="px-6 py-3 font-medium uppercase">状态</th>
+                        <th class="px-6 py-3 font-medium uppercase text-right">操作</th>
+                    </tr>
+                </thead>
+                <tbody class="text-sm font-mono text-slate-300">
+                    {% for item in stream_servers %}
+                    <tr class="border-b border-slate-700/30 table-row-hover">
+                        <td class="px-6 py-3 text-white">{{ item.mark }}</td>
+                        <td class="px-6 py-3">{{ item.veid }}</td>
+                        <td class="px-6 py-3 text-xs text-slate-500">API Key 已保存</td>
+                        <td class="px-6 py-3 text-right">
+                            <form action="/settings/stream-servers/delete" method="POST" class="inline">
+                                <input type="hidden" name="delete_veid" value="{{ item.veid }}">
+                                <input type="hidden" name="next_url" value="/server-stream">
+                                <button type="submit" class="px-3 py-1.5 rounded border border-danger/30 bg-danger/10 text-xs text-danger hover:bg-danger/20 transition-colors">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="px-6 py-8 text-center text-slate-500">暂无已保存服务器，请先在 /settings 配置。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mt-6" style="animation-delay: 0.1s;">
         <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between mobile-compact-header">
             <div>
