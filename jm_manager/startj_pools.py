@@ -10,7 +10,7 @@ import requests
 from jm_manager.db import Db, connect
 from jm_manager.utils import now_shanghai, to_iso
 
-
+#引入外部集群端点url
 STARTJ_URL = """startj_url"""
 
 
