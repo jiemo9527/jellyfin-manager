@@ -23,10 +23,12 @@ class RuntimeSettings:
     telegram_bot_token: str = ""
     telegram_user_id: str = ""
     telegram_enabled: bool = False
+    telegram_notify_types: str = ""
 
     telegram_public_bot_token: str = ""
     telegram_public_user_id: str = ""
     telegram_public_enabled: bool = False
+    telegram_public_notify_types: str = ""
 
     # Backup
     backup_enabled: bool = False
@@ -44,6 +46,7 @@ class RuntimeSettings:
     user_lifecycle_interval_hours: int = 3
     dns_refresh_interval_minutes: float = 4
     ban_rules_enabled: bool = True
+    startj_url: str = ""
     device_cleanup_enabled: bool = False
     device_cleanup_time: str = "03:30"
     device_cleanup_inactive_days: int = 40
@@ -61,9 +64,11 @@ _KEYS: dict[str, str] = {
     "telegram_bot_token": "telegram_bot_token",
     "telegram_user_id": "telegram_user_id",
     "telegram_enabled": "telegram_enabled",
+    "telegram_notify_types": "telegram_notify_types",
     "telegram_public_bot_token": "telegram_public_bot_token",
     "telegram_public_user_id": "telegram_public_user_id",
     "telegram_public_enabled": "telegram_public_enabled",
+    "telegram_public_notify_types": "telegram_public_notify_types",
     "backup_enabled": "backup_enabled",
     "backup_time": "backup_time",
     "backup_repo": "backup_repo",
@@ -77,6 +82,7 @@ _KEYS: dict[str, str] = {
     "user_lifecycle_interval_hours": "user_lifecycle_interval_hours",
     "dns_refresh_interval_minutes": "dns_refresh_interval_minutes",
     "ban_rules_enabled": "ban_rules_enabled",
+    "startj_url": "startj_url",
     "device_cleanup_enabled": "device_cleanup_enabled",
     "device_cleanup_time": "device_cleanup_time",
     "device_cleanup_inactive_days": "device_cleanup_inactive_days",
@@ -151,9 +157,11 @@ def load_runtime_settings(db: Db) -> RuntimeSettings:
         telegram_bot_token=get_str("telegram_bot_token"),
         telegram_user_id=get_str("telegram_user_id"),
         telegram_enabled=get_bool("telegram_enabled", False),
+        telegram_notify_types=get_str("telegram_notify_types"),
         telegram_public_bot_token=get_str("telegram_public_bot_token"),
         telegram_public_user_id=get_str("telegram_public_user_id"),
         telegram_public_enabled=get_bool("telegram_public_enabled", False),
+        telegram_public_notify_types=get_str("telegram_public_notify_types"),
         backup_enabled=get_bool("backup_enabled", False),
         backup_time=get_str("backup_time") or "06:00",
         backup_repo=get_str("backup_repo"),
@@ -167,6 +175,7 @@ def load_runtime_settings(db: Db) -> RuntimeSettings:
         user_lifecycle_interval_hours=get_int("user_lifecycle_interval_hours", 3),
         dns_refresh_interval_minutes=dns_minutes,
         ban_rules_enabled=get_bool("ban_rules_enabled", True),
+        startj_url=get_str("startj_url").strip(),
         device_cleanup_enabled=get_bool("device_cleanup_enabled", False),
         device_cleanup_time=get_str("device_cleanup_time") or "03:30",
         device_cleanup_inactive_days=get_int("device_cleanup_inactive_days", 40),

@@ -13,6 +13,7 @@ from typing import Any
 import json
 import hashlib
 import requests
+from urllib.parse import urlparse
 
 import threading
 
@@ -28,6 +29,10 @@ from jm_manager.db import Db, connect, has_any_user, init_db
 from jm_manager.jellyfin_api import JellyfinApi
 from jm_manager.runtime_settings import RuntimeSettings, load_runtime_settings, runtime_missing, save_runtime_settings
 from jm_manager.telegram_notify import (
+    NOTIFY_NONE,
+    TELEGRAM_NOTIFY_TYPE_OPTIONS,
+    enabled_telegram_notify_types,
+    enabled_telegram_public_notify_types,
     notify_user_created,
     notify_user_disabled,
     notify_user_enabled,
@@ -50,7 +55,8 @@ from jm_manager.ban_rules_store import (
     replace_blacklists as db_replace_ban_blacklists,
     replace_overrides as db_replace_ban_overrides,
 )
-from jm_manager.startj_pools import get_startj_pools
+from jm_manager.startj_pools import get_cached_startj_pools, get_startj_pools, refresh_startj_pools
+from jm_manager.paths import banuser_log_path
 from jm_manager.users_store import delete_user as db_delete_user
 from jm_manager.users_store import list_users as db_list_users
 from jm_manager.users_store import upsert_user as db_upsert_user
@@ -103,7 +109,8 @@ def build_plans(rt: RuntimeSettings) -> dict[str, dict[str, Any]]:
     }
 
 
-app = FastAPI(title="jellyfin-manager", version="0.1")
+APP_VERSION = os.getenv("JM_IMAGE_TAG", "dev")
+app = FastAPI(title="jellyfin-manager", version=APP_VERSION)
 templates = Jinja2Templates(directory="templates")
 templates.env.globals["app_version"] = app.version
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("JM_SESSION_SECRET", "dev"))
@@ -171,6 +178,198 @@ def _normalize_url(url: str) -> str:
     return str(url).strip().rstrip("/")
 
 
+def _url_hostname(url: str) -> str:
+    value = str(url or "").strip()
+    if not value:
+        return ""
+    parse_target = value if "://" in value else f"http://{value}"
+    try:
+        return str(urlparse(parse_target).hostname or "").strip().lower().rstrip(".")
+    except Exception:
+        return ""
+
+
+def _domain_suffix(hostname: str) -> str:
+    parts = [p for p in str(hostname or "").strip().lower().rstrip(".").split(".") if p]
+    if len(parts) <= 2:
+        return ".".join(parts)
+    return ".".join(parts[-2:])
+
+
+def _subdomain_prefix(hostname: str) -> str:
+    parts = [p for p in str(hostname or "").strip().lower().rstrip(".").split(".") if p]
+    if len(parts) <= 2:
+        return ""
+    return ".".join(parts[:-2])
+
+
+def _flatten_pool_urls(pools: dict[str, list[str]]) -> list[str]:
+    out: list[str] = []
+    for urls in (pools or {}).values():
+        for url in urls or []:
+            su = _normalize_url(str(url))
+            if su and su not in out:
+                out.append(su)
+    return out
+
+
+def _domain_suffix_pairs_from_pools(
+    old_pools: dict[str, list[str]],
+    new_pools: dict[str, list[str]],
+) -> list[tuple[str, str]]:
+    old_by_prefix: dict[str, set[str]] = {}
+    new_by_prefix: dict[str, set[str]] = {}
+    for url in _flatten_pool_urls(old_pools):
+        host = _url_hostname(url)
+        prefix = _subdomain_prefix(host)
+        suffix = _domain_suffix(host)
+        if suffix:
+            old_by_prefix.setdefault(prefix, set()).add(suffix)
+    for url in _flatten_pool_urls(new_pools):
+        host = _url_hostname(url)
+        prefix = _subdomain_prefix(host)
+        suffix = _domain_suffix(host)
+        if suffix:
+            new_by_prefix.setdefault(prefix, set()).add(suffix)
+
+    pairs: list[tuple[str, str]] = []
+    for prefix, old_suffixes in old_by_prefix.items():
+        new_suffixes = new_by_prefix.get(prefix) or set()
+        if len(old_suffixes) != 1 or len(new_suffixes) != 1:
+            continue
+        old_suffix = next(iter(old_suffixes))
+        new_suffix = next(iter(new_suffixes))
+        if old_suffix != new_suffix and (old_suffix, new_suffix) not in pairs:
+            pairs.append((old_suffix, new_suffix))
+    return pairs
+
+
+def _host_matches_suffix(hostname: str, suffix: str) -> bool:
+    host = str(hostname or "").lower().rstrip(".")
+    needle = str(suffix or "").lower().rstrip(".")
+    return bool(host and needle and (host == needle or host.endswith(f".{needle}")))
+
+
+def _remap_urls_to_current_pools(
+    urls: list[str],
+    all_urls: list[str],
+    *,
+    domain_suffix_pairs: list[tuple[str, str]] | None = None,
+) -> list[str]:
+    current_set = set(all_urls)
+    current_by_pair: dict[tuple[str, str], list[str]] = {}
+    for current_url in all_urls:
+        host = _url_hostname(current_url)
+        suffix = _domain_suffix(host)
+        prefix = _subdomain_prefix(host)
+        current_by_pair.setdefault((prefix, suffix), []).append(current_url)
+
+    out: list[str] = []
+    for item in urls:
+        su = _normalize_url(str(item))
+        if not su:
+            continue
+        mapped = su if su in current_set else ""
+
+        host = _url_hostname(su)
+        prefix = _subdomain_prefix(host)
+        if not mapped:
+            for old_suffix, new_suffix in domain_suffix_pairs or []:
+                if not _host_matches_suffix(host, old_suffix):
+                    continue
+                candidates = current_by_pair.get((prefix, new_suffix), [])
+                if len(candidates) == 1:
+                    mapped = candidates[0]
+                    break
+
+        if mapped and mapped not in out:
+            out.append(mapped)
+    return out
+
+
+def _dedupe_csv(value: str, *, casefold: bool = False) -> str:
+    parts = re.split(r"[,，\n\r]+", str(value or ""))
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in parts:
+        item = str(raw).strip()
+        if not item:
+            continue
+        key = item.casefold() if casefold else item
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return ",".join(out)
+
+
+def _normalize_stream_server(item: dict[str, Any]) -> dict[str, str] | None:
+    veid = str(item.get("veid") or "").strip()
+    api_key = str(item.get("api_key") or "").strip()
+    mark = str(item.get("mark") or "").strip() or veid
+    if not veid or not api_key:
+        return None
+    return {"veid": veid, "api_key": api_key, "mark": mark}
+
+
+def _dedupe_stream_servers(servers: list[dict[str, Any]]) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
+    for item in servers:
+        if not isinstance(item, dict):
+            continue
+        clean = _normalize_stream_server(item)
+        if clean:
+            normalized.append(clean)
+
+    out_rev: list[dict[str, str]] = []
+    seen_veids: set[str] = set()
+    for item in reversed(normalized):
+        veid = item["veid"]
+        if veid in seen_veids:
+            continue
+        seen_veids.add(veid)
+        out_rev.append(item)
+    return list(reversed(out_rev))
+
+
+def _merge_stream_servers(existing: list[dict[str, Any]], incoming: list[dict[str, Any]]) -> list[dict[str, str]]:
+    return _dedupe_stream_servers(list(existing) + list(incoming))
+
+
+def _normalize_library_scan_item(item: dict[str, Any], index: int = 0) -> dict[str, str] | None:
+    name = str(item.get("name") or "").strip()
+    lib_id = str(item.get("id") or "").strip()
+    code = str(item.get("code") or "").strip()
+    if not name or not lib_id:
+        return None
+    if not code:
+        code = _slugify(name, index)
+    return {"name": name, "id": lib_id, "code": code}
+
+
+def _dedupe_library_scan_items(items: list[dict[str, Any]]) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        clean = _normalize_library_scan_item(item, idx)
+        if clean:
+            normalized.append(clean)
+
+    out_rev: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    seen_codes: set[str] = set()
+    for item in reversed(normalized):
+        lib_id = item["id"]
+        code = item["code"]
+        if lib_id in seen_ids or code in seen_codes:
+            continue
+        seen_ids.add(lib_id)
+        seen_codes.add(code)
+        out_rev.append(item)
+    return list(reversed(out_rev))
+
+
 def _get_servers_and_all_urls(rt: RuntimeSettings, db: Db) -> tuple[dict[str, list[str]], list[str]]:
     servers_raw = get_startj_pools(db)
     if not servers_raw:
@@ -227,17 +426,7 @@ def _load_stream_servers(db: Db) -> list[dict[str, str]]:
         return []
     if not isinstance(data, list):
         return []
-    out: list[dict[str, str]] = []
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        veid = str(item.get("veid") or "").strip()
-        api_key = str(item.get("api_key") or "").strip()
-        mark = str(item.get("mark") or "").strip() or veid
-        if not veid or not api_key:
-            continue
-        out.append({"veid": veid, "api_key": api_key, "mark": mark})
-    return out
+    return _dedupe_stream_servers(data)
 
 
 def _format_gb(size_bytes: int) -> float:
@@ -290,7 +479,7 @@ def _fetch_stream_item(veid: str, api_key: str, mark: str) -> dict[str, str]:
 
 
 def _save_stream_servers(db: Db, servers: list[dict[str, str]]) -> None:
-    payload = json.dumps(servers, ensure_ascii=False, separators=(",", ":"))
+    payload = json.dumps(_dedupe_stream_servers(servers), ensure_ascii=False, separators=(",", ":"))
     now = to_iso(now_shanghai())
     conn = connect(db)
     try:
@@ -381,6 +570,54 @@ def _slugify(text: str, index: int = 0) -> str:
     return f"lib-{index + 1}" if index > 0 else "lib"
 
 
+SCAN_MODE_PRESETS: dict[str, dict[str, Any]] = {
+    "default": {
+        "label": "默认（扫描新内容）",
+        "params": {
+            "recursive": True,
+            "image_refresh_mode": "Default",
+            "metadata_refresh_mode": "Default",
+            "replace_all_images": False,
+            "regenerate_trickplay": False,
+            "replace_all_metadata": False,
+        },
+    },
+    "missing_and_images": {
+        "label": "扫描缺少内容并刷新图片",
+        "params": {
+            "recursive": True,
+            "image_refresh_mode": "FullRefresh",
+            "metadata_refresh_mode": "FullRefresh",
+            "replace_all_images": True,
+            "regenerate_trickplay": True,
+            "replace_all_metadata": False,
+        },
+    },
+}
+
+
+def _scan_mode_options() -> list[dict[str, str]]:
+    return [
+        {"key": key, "label": str(meta.get("label") or key)}
+        for key, meta in SCAN_MODE_PRESETS.items()
+    ]
+
+
+def _resolve_scan_mode(scan_mode: str) -> tuple[str, dict[str, Any]]:
+    key = str(scan_mode or "default").strip()
+    if key not in SCAN_MODE_PRESETS:
+        key = "default"
+    meta = SCAN_MODE_PRESETS[key]
+    params = dict(meta.get("params") or {})
+    return key, params
+
+
+def _wants_json_response(request: Request) -> bool:
+    accept = str(request.headers.get("accept") or "").lower()
+    requested_with = str(request.headers.get("x-requested-with") or "").lower()
+    return "application/json" in accept or requested_with == "xmlhttprequest"
+
+
 def _load_library_scan_items(db: Db, rt: RuntimeSettings) -> list[dict[str, str]]:
     conn = connect(db)
     try:
@@ -397,23 +634,13 @@ def _load_library_scan_items(db: Db, rt: RuntimeSettings) -> list[dict[str, str]
         except Exception:
             data = None
         if isinstance(data, list):
-            for idx, item in enumerate(data):
-                if not isinstance(item, dict):
-                    continue
-                name = str(item.get("name") or "").strip()
-                lib_id = str(item.get("id") or "").strip()
-                code = str(item.get("code") or "").strip()
-                if not name or not lib_id:
-                    continue
-                if not code:
-                    code = _slugify(name, idx)
-                items.append({"name": name, "id": lib_id, "code": code})
+            items = _dedupe_library_scan_items(data)
 
     return items
 
 
 def _save_library_scan_items(db: Db, items: list[dict[str, str]]) -> None:
-    payload = json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+    payload = json.dumps(_dedupe_library_scan_items(items), ensure_ascii=False, separators=(",", ":"))
     now = to_iso(now_shanghai())
     conn = connect(db)
     try:
@@ -615,6 +842,65 @@ def _auto_apply_ban_rules_on_user_change(db: Db, rt: RuntimeSettings) -> None:
     db_replace_ban_blacklists(db, new_blacklists)
     db_replace_ban_overrides(db, users)
     _append_log(f"[分流] 自动应用 users={len(users)} rules={len(new_blacklists)}")
+
+
+def _effective_ban_blacklists_for_current_pools(
+    db: Db,
+    rt: RuntimeSettings,
+    *,
+    domain_suffix_pairs: list[tuple[str, str]] | None = None,
+) -> dict[str, list[str]]:
+    servers, all_urls = _get_servers_and_all_urls(rt, db)
+    stored = db_list_ban_blacklists(db)
+    overrides = db_list_ban_overrides(db)
+    users_rows = db_list_users(db)
+    users = [str(u.get("username") or "").strip() for u in users_rows if str(u.get("username") or "").strip()]
+    plan_by_user = {str(u.get("username")): str(u.get("plan_id")) for u in users_rows if u.get("username")}
+    admin_names = _get_admin_names(rt)
+    default_blacklist_normal = _default_blacklist_normal(servers, all_urls)
+
+    effective: dict[str, list[str]] = {}
+    for username in users:
+        if username in admin_names:
+            continue
+        if username in overrides:
+            vals = _remap_urls_to_current_pools(
+                stored.get(username, []),
+                all_urls,
+                domain_suffix_pairs=domain_suffix_pairs,
+            )
+            if vals:
+                effective[username] = vals
+            continue
+
+        pid = plan_by_user.get(username, "")
+        is_pro = pid in {"5", "6", "7", "8"}
+        if not is_pro and default_blacklist_normal:
+            effective[username] = list(default_blacklist_normal)
+    return effective
+
+
+def _sync_ban_blacklists_to_current_pools(
+    db: Db,
+    rt: RuntimeSettings,
+    *,
+    reason: str,
+    domain_suffix_pairs: list[tuple[str, str]] | None = None,
+) -> bool:
+    new_blacklists = _effective_ban_blacklists_for_current_pools(
+        db,
+        rt,
+        domain_suffix_pairs=domain_suffix_pairs,
+    )
+    current_blacklists = {
+        username: [_normalize_url(str(x)) for x in urls if _normalize_url(str(x))]
+        for username, urls in db_list_ban_blacklists(db).items()
+    }
+    if current_blacklists == new_blacklists:
+        return False
+    db_replace_ban_blacklists(db, new_blacklists)
+    _append_log(f"[分流] StartJ 规则同步 reason={reason} users={len(new_blacklists)}")
+    return True
 
 
 def _tail_file(path: str, *, max_lines: int = 200, max_bytes: int = 128 * 1024) -> list[str]:
@@ -913,6 +1199,32 @@ def _start_stream_check_scheduler(settings: Settings) -> None:
     t.start()
 
 
+def _start_startj_pool_scheduler(settings: Settings) -> None:
+    def _loop() -> None:
+        while True:
+            time.sleep(60)
+            db = _db(settings)
+            rt = load_runtime_settings(db)
+            if not str(rt.startj_url or "").strip():
+                continue
+            old_pools = get_cached_startj_pools(db)
+            pools, changed = refresh_startj_pools(db, ttl_seconds=300)
+            if not pools or not changed:
+                continue
+            try:
+                _sync_ban_blacklists_to_current_pools(
+                    db,
+                    rt,
+                    reason="startj-refresh",
+                    domain_suffix_pairs=_domain_suffix_pairs_from_pools(old_pools, pools),
+                )
+            except Exception as e:
+                _append_log(f"[分流] StartJ 规则同步失败 err={e}")
+
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+
+
 def _notify_once(cache_key: str, username: str, marker: str) -> bool:
     cache: dict[str, str] = getattr(app.state, cache_key, {})
     last_value = cache.get(username)
@@ -1099,6 +1411,7 @@ def _start_user_lifecycle_scheduler(settings: Settings) -> None:
 @app.get("/ban-rules/logs")
 def ban_rules_logs(
     request: Request,
+    settings: Settings = Depends(get_settings),
     rt: RuntimeSettings = Depends(get_runtime_settings),
 ) -> Any:
     try:
@@ -1106,8 +1419,8 @@ def ban_rules_logs(
     except HTTPException:
         return JSONResponse(status_code=401, content={"ok": False, "error": "unauthorized"})
 
-    banuser_log_path = str(Path("data") / "banuser.log")
-    p = Path(banuser_log_path)
+    log_path = banuser_log_path(settings.db_path)
+    p = Path(log_path)
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         if not p.exists():
@@ -1125,7 +1438,7 @@ def ban_rules_logs(
     except Exception:
         pass
 
-    lines = _tail_file(banuser_log_path, max_lines=200)
+    lines = _tail_file(str(log_path), max_lines=200)
     lines = [_to_shanghai_line(str(x)) for x in lines]
     manager_lines = [
         str(x)
@@ -1134,7 +1447,7 @@ def ban_rules_logs(
     ][-80:]
     return {
         "ok": True,
-        "path": banuser_log_path,
+        "path": str(log_path),
         "exists": bool(exists),
         "size": size,
         "mtime": mtime,
@@ -1148,6 +1461,7 @@ def ban_rules_logs(
 @app.post("/ban-rules/logs/clear")
 def ban_rules_logs_clear(
     request: Request,
+    settings: Settings = Depends(get_settings),
     rt: RuntimeSettings = Depends(get_runtime_settings),
 ) -> Any:
     try:
@@ -1155,10 +1469,9 @@ def ban_rules_logs_clear(
     except HTTPException:
         return JSONResponse(status_code=401, content={"ok": False, "error": "unauthorized"})
 
-    banuser_log_path = str(Path("data") / "banuser.log")
     ok = True
     try:
-        p = Path(banuser_log_path)
+        p = banuser_log_path(settings.db_path)
         p.parent.mkdir(parents=True, exist_ok=True)
         if p.exists() and p.is_file():
             p.write_text("", encoding="utf-8")
@@ -1374,6 +1687,7 @@ def _startup() -> None:
     _start_backup_scheduler(settings)
     _start_user_lifecycle_scheduler(settings)
     _start_device_cleanup_scheduler(settings)
+    _start_startj_pool_scheduler(settings)
     try:
         rt = load_runtime_settings(_db(settings))
         servers = _load_stream_servers(_db(settings))
@@ -1452,6 +1766,7 @@ def settings_get(
     server_marks = [str(s.get("mark") or "") for s in servers if s.get("mark")]
     scan_items = _load_library_scan_items(_db(settings), rt)
     device_cleanup_rules = _load_device_cleanup_rules(_db(settings))
+    current_scope = str(request.query_params.get("scope") or "").strip()
 
     return templates.TemplateResponse(
         "settings.html",
@@ -1461,9 +1776,14 @@ def settings_get(
             "saved": saved,
             "error": error,
             "missing": missing,
+            "current_scope": current_scope,
             "stream_server_marks": server_marks,
             "library_scan_items": scan_items,
             "device_cleanup_rules": device_cleanup_rules,
+            "telegram_notify_options": TELEGRAM_NOTIFY_TYPE_OPTIONS,
+            "telegram_public_notify_options": TELEGRAM_NOTIFY_TYPE_OPTIONS,
+            "telegram_notify_enabled_types": enabled_telegram_notify_types(rt),
+            "telegram_public_notify_enabled_types": enabled_telegram_public_notify_types(rt),
         },
     )
 
@@ -1493,6 +1813,7 @@ async def settings_post(
 
     updates: dict[str, Any] = {}
     skip_if_blank = {"jellyfin_admin_api_key", "web_password", "api_key"}
+    old_startj_pools = get_cached_startj_pools(_db(settings))
 
     if in_scope("jellyfin"):
         clear_jellyfin_key = str(form.get("CLEAR_JM_JELLYFIN_ADMIN_API_KEY") or "").strip() != ""
@@ -1544,29 +1865,34 @@ async def settings_post(
         clear_telegram_bot_token = str(form.get("CLEAR_JM_TELEGRAM_BOT_TOKEN") or "").strip() != ""
         telegram_enabled = "1" if str(form.get("JM_TELEGRAM_ENABLED") or "").strip() else "0"
         new_telegram_bot_token = str(form.get("JM_TELEGRAM_BOT_TOKEN") or "").strip()
-        telegram_user_id = str(form.get("JM_TELEGRAM_USER_ID") or "").strip()
-        clear_public_bot_token = str(form.get("CLEAR_JM_TELEGRAM_PUBLIC_BOT_TOKEN") or "").strip() != ""
+        telegram_user_id = _dedupe_csv(str(form.get("JM_TELEGRAM_USER_ID") or "").strip())
         public_enabled = "1" if str(form.get("JM_TELEGRAM_PUBLIC_ENABLED") or "").strip() else "0"
-        public_bot_token = str(form.get("JM_TELEGRAM_PUBLIC_BOT_TOKEN") or "").strip()
-        public_user_id = str(form.get("JM_TELEGRAM_PUBLIC_USER_ID") or "").strip()
+        public_user_id = _dedupe_csv(str(form.get("JM_TELEGRAM_PUBLIC_USER_ID") or "").strip())
+        telegram_notify_types = [
+            str(x)
+            for x in form.getlist("JM_TELEGRAM_NOTIFY_TYPES")
+            if str(x) in {str(item.get("key") or "") for item in TELEGRAM_NOTIFY_TYPE_OPTIONS}
+        ]
+        telegram_public_notify_types = [
+            str(x)
+            for x in form.getlist("JM_TELEGRAM_PUBLIC_NOTIFY_TYPES")
+            if str(x) in {str(item.get("key") or "") for item in TELEGRAM_NOTIFY_TYPE_OPTIONS}
+        ]
         updates.update(
             {
                 "telegram_enabled": telegram_enabled,
                 "telegram_bot_token": "" if clear_telegram_bot_token else new_telegram_bot_token,
                 "telegram_user_id": telegram_user_id,
+                "telegram_notify_types": ",".join(telegram_notify_types) if telegram_notify_types else NOTIFY_NONE,
                 "telegram_public_enabled": public_enabled,
-                "telegram_public_bot_token": "" if clear_public_bot_token else public_bot_token,
                 "telegram_public_user_id": public_user_id,
+                "telegram_public_notify_types": ",".join(telegram_public_notify_types) if telegram_public_notify_types else NOTIFY_NONE,
             }
         )
         if clear_telegram_bot_token:
             skip_if_blank.discard("telegram_bot_token")
         else:
             skip_if_blank.add("telegram_bot_token")
-        if clear_public_bot_token:
-            skip_if_blank.discard("telegram_public_bot_token")
-        else:
-            skip_if_blank.add("telegram_public_bot_token")
 
     if in_scope("backup"):
         clear_restic_password = str(form.get("CLEAR_JM_BACKUP_RESTIC_PASSWORD") or "").strip() != ""
@@ -1620,6 +1946,7 @@ async def settings_post(
             )
         except Exception:
             dns_refresh_interval_minutes = 4
+        startj_url = str(form.get("JM_STARTJ_URL") or "").strip()
         device_cleanup_enabled = "1" if str(form.get("JM_DEVICE_CLEANUP_ENABLED") or "").strip() else "0"
         device_cleanup_time = str(form.get("JM_DEVICE_CLEANUP_TIME") or "").strip() or "03:30"
         try:
@@ -1628,7 +1955,10 @@ async def settings_post(
             )
         except Exception:
             device_cleanup_inactive_days = 40
-        device_cleanup_app_keywords = str(form.get("JM_DEVICE_CLEANUP_APP_KEYWORDS") or "").strip()
+        device_cleanup_app_keywords = _dedupe_csv(
+            str(form.get("JM_DEVICE_CLEANUP_APP_KEYWORDS") or "").strip(),
+            casefold=True,
+        )
         clear_cleanup_rules = str(form.get("CLEAR_JM_DEVICE_CLEANUP_RULES") or "").strip() != ""
         cleanup_rules_raw = str(form.get("JM_DEVICE_CLEANUP_RULES_JSON") or "").strip()
         updates.update(
@@ -1636,6 +1966,7 @@ async def settings_post(
                 "user_lifecycle_enabled": user_lifecycle_enabled,
                 "user_lifecycle_interval_hours": user_lifecycle_interval_hours,
                 "dns_refresh_interval_minutes": dns_refresh_interval_minutes,
+                "startj_url": startj_url,
                 "device_cleanup_enabled": device_cleanup_enabled,
                 "device_cleanup_time": device_cleanup_time,
                 "device_cleanup_inactive_days": device_cleanup_inactive_days,
@@ -1684,6 +2015,17 @@ async def settings_post(
 
     if updates:
         save_runtime_settings(_db(settings), updates, skip_if_blank=skip_if_blank)
+        db = _db(settings)
+        rt2 = load_runtime_settings(db)
+        startj_updated = in_scope("schedules") and "startj_url" in updates
+        if startj_updated and str(rt2.startj_url or "").strip():
+            new_startj_pools, _ = refresh_startj_pools(db, ttl_seconds=0)
+            _sync_ban_blacklists_to_current_pools(
+                db,
+                rt2,
+                reason="startj-url-updated",
+                domain_suffix_pairs=_domain_suffix_pairs_from_pools(old_startj_pools, new_startj_pools),
+            )
 
     clear_stream_servers = str(form.get("CLEAR_JM_STREAM_SERVERS") or "").strip() != ""
     stream_servers_raw = str(form.get("JM_STREAM_SERVERS_JSON") or "").strip()
@@ -1694,17 +2036,16 @@ async def settings_post(
             parsed = json.loads(stream_servers_raw)
             if not isinstance(parsed, list):
                 raise ValueError("服务器列表必须是 JSON 数组")
-            servers: list[dict[str, str]] = []
+            existing_servers = _load_stream_servers(_db(settings))
+            incoming_servers: list[dict[str, str]] = []
             for item in parsed:
                 if not isinstance(item, dict):
                     continue
-                veid = str(item.get("veid") or "").strip()
-                api_key = str(item.get("api_key") or "").strip()
-                mark = str(item.get("mark") or "").strip() or veid
-                if not veid or not api_key:
-                    continue
-                servers.append({"veid": veid, "api_key": api_key, "mark": mark})
-            _save_stream_servers(_db(settings), servers)
+                clean = _normalize_stream_server(item)
+                if clean:
+                    incoming_servers.append(clean)
+            merged_servers = _merge_stream_servers(existing_servers, incoming_servers)
+            _save_stream_servers(_db(settings), merged_servers)
         except Exception as e:
             return RedirectResponse(url=f"/settings?error=服务器列表解析失败: {e}", status_code=302)
 
@@ -1719,16 +2060,9 @@ async def settings_post(
                 raise ValueError("媒体库列表必须是 JSON 数组")
             items: list[dict[str, str]] = []
             for idx, item in enumerate(parsed):
-                if not isinstance(item, dict):
-                    continue
-                name = str(item.get("name") or "").strip()
-                lib_id = str(item.get("id") or "").strip()
-                code = str(item.get("code") or "").strip()
-                if not name or not lib_id:
-                    continue
-                if not code:
-                    code = _slugify(name, idx)
-                items.append({"name": name, "id": lib_id, "code": code})
+                clean = _normalize_library_scan_item(item, idx)
+                if clean:
+                    items.append(clean)
             _save_library_scan_items(_db(settings), items)
         except Exception as e:
             return RedirectResponse(url=f"/settings?error=媒体库列表解析失败: {e}", status_code=302)
@@ -1744,7 +2078,17 @@ async def settings_post(
         else:
             # 关闭登录：清掉会话
             request.session.clear()
-    return RedirectResponse(url="/settings?saved=1", status_code=303)
+    redirect_scope = ""
+    if scope and len(scope) == 1:
+        redirect_scope = next(iter(scope))
+    if redirect_scope == "security":
+        redirect_scope = "jellyfin"
+    elif redirect_scope == "maintenance":
+        redirect_scope = "backup"
+    redirect_url = "/settings?saved=1"
+    if redirect_scope:
+        redirect_url += f"&scope={redirect_scope}"
+    return RedirectResponse(url=redirect_url, status_code=303)
 
 
 @app.post("/settings/stream-servers/delete")
@@ -1852,7 +2196,7 @@ async def settings_import(
         return RedirectResponse(url="/settings?error=导入失败: 格式无效", status_code=302)
 
     _import_full_backup(_db(settings), payload, replace_all=str(replace_all).strip() != "")
-    return RedirectResponse(url="/settings?saved=1", status_code=302)
+    return RedirectResponse(url="/settings?saved=1&scope=backup", status_code=302)
 
 
 @app.post("/settings/db-vacuum")
@@ -1877,7 +2221,7 @@ def settings_db_vacuum(
         _append_log(f"[系统] 数据库压缩失败: {e}")
         return RedirectResponse(url=f"/settings?error=数据库压缩失败:{e}", status_code=302)
 
-    return RedirectResponse(url="/settings?saved=1", status_code=302)
+    return RedirectResponse(url="/settings?saved=1&scope=backup", status_code=302)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1960,6 +2304,7 @@ def dashboard(
             "backup_summary": backup_summary,
             "backup_info": backup_info,
             "scan_items": scan_items,
+            "scan_mode_options": _scan_mode_options(),
             "env_info": env_info,
         },
     )
@@ -3128,7 +3473,8 @@ def server_stream_page(
 
     servers = _load_stream_servers(_db(settings))
     marks = [str(s.get("mark") or "") for s in servers if s.get("mark")]
-    ns_host = str(request.query_params.get("host") or "0vid.de").strip() or "0vid.de"
+    ns_default_host = _url_hostname(rt.jellyfin_pro_url) or _url_hostname(rt.jellyfin_base_url) or "0vide.com"
+    ns_host = str(request.query_params.get("host") or ns_default_host).strip() or ns_default_host
     nslookup_result = _run_nslookup(ns_host)
     return templates.TemplateResponse(
         "server_stream.html",
@@ -3138,6 +3484,7 @@ def server_stream_page(
             "server_marks": marks,
             "nslookup_result": nslookup_result,
             "ns_host": ns_host,
+            "ns_default_host": ns_default_host,
         },
     )
 
@@ -3254,13 +3601,14 @@ def tasks_scan(
         return RedirectResponse(url="/settings?error=请先配置 Jellyfin 连接信息", status_code=302)
 
     jf = _require_jellyfin(rt)
+    _, scan_params = _resolve_scan_mode("default")
     items = _load_library_scan_items(_db(settings), rt)
     ok = 0
     for idx, item in enumerate(items):
         lib_id = str(item.get("id") or "").strip()
         if not lib_id:
             continue
-        jf.refresh_library_default(lib_id)
+        jf.refresh_library(lib_id, **scan_params)
         ok += 1
         _append_log(f"[扫描] 媒体库刷新 ok name={item.get('name')}")
         if idx < len(items) - 1:
@@ -3276,6 +3624,7 @@ def tasks_scan_one(
     code: str,
     settings: Settings = Depends(get_settings),
     rt: RuntimeSettings = Depends(get_runtime_settings),
+    scan_mode: str = Form(""),
 ) -> Any:
     try:
         require_session(rt, request)
@@ -3283,6 +3632,8 @@ def tasks_scan_one(
         return RedirectResponse(url="/login", status_code=302)
 
     if not rt.jellyfin_base_url or not rt.jellyfin_admin_api_key:
+        if _wants_json_response(request):
+            return JSONResponse(status_code=503, content={"ok": False, "error": "请先配置 Jellyfin 连接信息"})
         return RedirectResponse(url="/settings?error=请先配置 Jellyfin 连接信息", status_code=302)
 
     items = _load_library_scan_items(_db(settings), rt)
@@ -3293,15 +3644,30 @@ def tasks_scan_one(
             break
     if not found:
         _append_log(f"[扫描] 无效代码 code={code}")
+        if _wants_json_response(request):
+            return JSONResponse(status_code=400, content={"ok": False, "error": "无效扫描项"})
         return RedirectResponse(url="/tasks", status_code=303)
     lib_id = str(found.get("id") or "").strip()
     if not lib_id:
         _append_log(f"[扫描] 跳过：缺少媒体库ID code={code}")
+        if _wants_json_response(request):
+            return JSONResponse(status_code=400, content={"ok": False, "error": "缺少媒体库 ID"})
         return RedirectResponse(url="/tasks", status_code=303)
 
+    scan_mode_value = str(scan_mode or "").strip() or str(request.query_params.get("scan_mode") or "default").strip()
+
     jf = _require_jellyfin(rt)
-    jf.refresh_library_default(lib_id)
-    _append_log(f"[扫描] 媒体库刷新 ok name={found.get('name')}")
+    resolved_mode, scan_params = _resolve_scan_mode(scan_mode_value)
+    jf.refresh_library(lib_id, **scan_params)
+    _append_log(f"[扫描] 媒体库刷新 ok name={found.get('name')} mode={resolved_mode}")
+    if _wants_json_response(request):
+        return {
+            "ok": True,
+            "code": code,
+            "name": str(found.get("name") or code),
+            "scan_mode": resolved_mode,
+            "scan_mode_label": str(SCAN_MODE_PRESETS[resolved_mode].get("label") or resolved_mode),
+        }
     return RedirectResponse(url="/tasks", status_code=303)
 
 
@@ -3470,6 +3836,7 @@ def api_tasks_scan_one(
     code: str,
     settings: Settings = Depends(get_settings),
     rt: RuntimeSettings = Depends(get_runtime_settings),
+    scan_mode: str = Form(""),
 ) -> Any:
     require_api_key(rt, request)
     try:
@@ -3488,8 +3855,10 @@ def api_tasks_scan_one(
     lib_id = str(found.get("id") or "").strip()
     if not lib_id:
         return JSONResponse(status_code=400, content={"ok": False, "error": f"missing library id for {code}"})
-    jf.refresh_library_default(lib_id)
-    return {"ok": True, "libraries": [code]}
+    scan_mode_value = str(scan_mode or "").strip() or str(request.query_params.get("scan_mode") or "default").strip()
+    resolved_mode, scan_params = _resolve_scan_mode(scan_mode_value)
+    jf.refresh_library(lib_id, **scan_params)
+    return {"ok": True, "libraries": [code], "scan_mode": resolved_mode}
 
 
 @app.post("/api/tasks/backup")

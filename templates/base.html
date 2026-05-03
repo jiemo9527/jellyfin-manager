@@ -73,12 +73,7 @@
 
             <a href="/device-cleanup" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
                 <svg class="w-5 h-5 mr-3 group-hover:text-warning transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M4 10h16M5 14h14M6 18h12"></path></svg>
-                <span class="text-sm font-medium">设备清理</span>
-            </a>
-
-            <a href="#" onclick="return false;" class="nav-link flex items-center px-6 py-3 text-slate-500 hover:text-slate-500 hover:bg-slate-700/10 transition-colors group cursor-not-allowed">
-                <svg class="w-5 h-5 mr-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h6l5 5v12a2 2 0 01-2 2z"></path></svg>
-                <span class="text-sm font-medium">API 管理（待实现）</span>
+                <span class="text-sm font-medium">手动清理设备</span>
             </a>
 
             <a href="/tasks" class="nav-link flex items-center px-6 py-3 text-slate-400 hover:text-white hover:bg-slate-700/30 transition-colors group">
@@ -147,8 +142,69 @@
         </div>
     </main>
 
+    <div id="jm-dialog" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+        <div class="w-full max-w-md rounded-2xl border border-slate-700 bg-card shadow-2xl shadow-black/40">
+            <div class="px-6 py-5 border-b border-slate-700/60">
+                <h2 id="jm-dialog-title" class="text-base font-bold text-white">确认操作</h2>
+                <p id="jm-dialog-message" class="mt-2 text-sm leading-6 text-slate-300 whitespace-pre-wrap"></p>
+            </div>
+            <div class="flex justify-end gap-3 px-6 py-4">
+                <button type="button" id="jm-dialog-cancel" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm text-slate-300 hover:bg-slate-700 hover:text-white">取消</button>
+                <button type="button" id="jm-dialog-ok" class="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-sm font-bold text-white shadow-lg shadow-primary/20">确定</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Simple active link highlighter
+        window.jmDialog = ({ title = '提示', message = '', confirmText = '确定', cancelText = '取消', danger = false, alertOnly = false } = {}) => {
+            const wrap = document.getElementById('jm-dialog');
+            const titleEl = document.getElementById('jm-dialog-title');
+            const msgEl = document.getElementById('jm-dialog-message');
+            const okBtn = document.getElementById('jm-dialog-ok');
+            const cancelBtn = document.getElementById('jm-dialog-cancel');
+            if (!wrap || !titleEl || !msgEl || !okBtn || !cancelBtn) {
+                return Promise.resolve(alertOnly ? true : false);
+            }
+            titleEl.textContent = title;
+            msgEl.textContent = message;
+            okBtn.textContent = confirmText;
+            cancelBtn.textContent = cancelText;
+            cancelBtn.classList.toggle('hidden', alertOnly);
+            okBtn.classList.toggle('bg-danger', danger);
+            okBtn.classList.toggle('hover:bg-danger/80', danger);
+            okBtn.classList.toggle('bg-primary', !danger);
+            okBtn.classList.toggle('hover:bg-primary-hover', !danger);
+            wrap.classList.remove('hidden');
+            wrap.classList.add('flex');
+            return new Promise((resolve) => {
+                const close = (value) => {
+                    wrap.classList.add('hidden');
+                    wrap.classList.remove('flex');
+                    okBtn.removeEventListener('click', onOk);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    wrap.removeEventListener('click', onBackdrop);
+                    document.removeEventListener('keydown', onKey);
+                    resolve(value);
+                };
+                const onOk = () => close(true);
+                const onCancel = () => close(false);
+                const onBackdrop = (event) => {
+                    if (event.target === wrap) close(false);
+                };
+                const onKey = (event) => {
+                    if (event.key === 'Escape') close(false);
+                };
+                okBtn.addEventListener('click', onOk);
+                cancelBtn.addEventListener('click', onCancel);
+                wrap.addEventListener('click', onBackdrop);
+                document.addEventListener('keydown', onKey);
+                okBtn.focus();
+            });
+        };
+        window.jmConfirm = (message, options = {}) => window.jmDialog({ title: '确认操作', message, ...options });
+        window.jmAlert = (message, options = {}) => window.jmDialog({ title: '提示', message, alertOnly: true, confirmText: '知道了', ...options });
+
         document.addEventListener('DOMContentLoaded', () => {
             const currentPath = window.location.pathname;
             document.querySelectorAll('.nav-link').forEach(link => {

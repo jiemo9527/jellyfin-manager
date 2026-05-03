@@ -2,6 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+ARG JM_IMAGE_TAG=dev
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends restic ca-certificates curl unzip \
     && rm -rf /var/lib/apt/lists/*
@@ -19,6 +21,7 @@ COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENV PYTHONUNBUFFERED=1
+ENV JM_IMAGE_TAG=${JM_IMAGE_TAG}
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "jm_manager"]

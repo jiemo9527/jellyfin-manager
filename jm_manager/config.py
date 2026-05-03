@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from pathlib import Path
 
 from dotenv import load_dotenv
+
+from jm_manager.paths import default_db_path
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ def load_settings() -> Settings:
     host = os.getenv("JM_HOST", "0.0.0.0")
     port = int(os.getenv("JM_PORT", "18080"))
 
-    db_path = os.getenv("JM_DB_PATH", str(Path("data") / "jellyfin_manager.db"))
+    db_path = os.getenv("JM_DB_PATH", default_db_path())
 
     session_secret = os.getenv("JM_SESSION_SECRET", "")
 

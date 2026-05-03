@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlencode
 
 import requests
 
@@ -60,15 +61,34 @@ class JellyfinApi:
         policy["IsDisabled"] = False
         self.update_policy(user_id, policy)
 
-    def refresh_library_default(self, library_id: str) -> None:
-        url = (
-            f"{self.base_url}/Items/{library_id}/Refresh"
-            "?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default"
-            "&ReplaceAllImages=false&RegenerateTrickplay=false&ReplaceAllMetadata=false"
+    def refresh_library(
+        self,
+        library_id: str,
+        *,
+        recursive: bool = True,
+        image_refresh_mode: str = "Default",
+        metadata_refresh_mode: str = "Default",
+        replace_all_images: bool = False,
+        regenerate_trickplay: bool = False,
+        replace_all_metadata: bool = False,
+    ) -> None:
+        query = urlencode(
+            {
+                "Recursive": "true" if recursive else "false",
+                "ImageRefreshMode": image_refresh_mode,
+                "MetadataRefreshMode": metadata_refresh_mode,
+                "ReplaceAllImages": "true" if replace_all_images else "false",
+                "RegenerateTrickplay": "true" if regenerate_trickplay else "false",
+                "ReplaceAllMetadata": "true" if replace_all_metadata else "false",
+            }
         )
+        url = f"{self.base_url}/Items/{library_id}/Refresh?{query}"
         r = requests.post(url, headers=self.headers(), timeout=30)
         if r.status_code != 204:
             r.raise_for_status()
+
+    def refresh_library_default(self, library_id: str) -> None:
+        self.refresh_library(library_id)
 
     def get_devices(self) -> list[dict[str, Any]]:
         r = requests.get(f"{self.base_url}/Devices", headers=self.headers(), timeout=15)

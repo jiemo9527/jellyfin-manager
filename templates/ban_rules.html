@@ -181,17 +181,18 @@
     }
 
     async function banLogClear() {
-        if (!confirm('确定要清空日志吗？')) return;
+        const ok = await jmConfirm('确定要清空日志吗？', { title: '清空分流日志', confirmText: '清空', danger: true });
+        if (!ok) return;
         try {
             const res = await fetch('/ban-rules/logs/clear', { method: 'POST', headers: { 'Accept': 'application/json' } });
             const data = await res.json();
             if (!data || !data.ok) {
-                alert('清空失败');
+                await jmAlert('清空失败', { title: '操作失败' });
                 return;
             }
             banLogRefreshOnce();
         } catch (e) {
-            alert('清空失败');
+            await jmAlert('清空失败', { title: '操作失败' });
         }
     }
 

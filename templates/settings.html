@@ -4,6 +4,7 @@
 
 {% block content %}
 <div class="max-w-5xl mx-auto pb-12">
+    <div id="settings-scope-source" data-current-scope="{{ current_scope }}" class="hidden"></div>
 
     <!-- Notifications -->
     {% if error %}
@@ -34,12 +35,43 @@
     </div>
     {% endif %}
 
+    <div class="mb-6 sticky top-0 z-[5]">
+        <div class="glass-panel rounded-xl p-3 border border-slate-700/50 backdrop-blur-md">
+            <div class="flex gap-3 overflow-x-auto pb-1" id="settings-nav-cards">
+                <button type="button" data-settings-target="jellyfin" class="settings-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-primary/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">Jellyfin / 安全</div>
+                    <div class="text-[11px] text-slate-400 mt-1">连接、API 与鉴权</div>
+                </button>
+                <button type="button" data-settings-target="telegram" class="settings-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-primary/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">Telegram</div>
+                    <div class="text-[11px] text-slate-400 mt-1">通知接收</div>
+                </button>
+                <button type="button" data-settings-target="library_scan" class="settings-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-primary/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">媒体库</div>
+                    <div class="text-[11px] text-slate-400 mt-1">扫描映射</div>
+                </button>
+                <button type="button" data-settings-target="backup" class="settings-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-primary/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">备份 / 维护</div>
+                    <div class="text-[11px] text-slate-400 mt-1">备份、数据库与导入导出</div>
+                </button>
+                <button type="button" data-settings-target="schedules" class="settings-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-primary/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">定时任务</div>
+                    <div class="text-[11px] text-slate-400 mt-1">生命周期与清理</div>
+                </button>
+                <button type="button" data-settings-target="stream" class="settings-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-primary/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">流量监控</div>
+                    <div class="text-[11px] text-slate-400 mt-1">服务器配置</div>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="space-y-8">
         
         <!-- Jellyfin Connection -->
         <form action="/settings" method="POST">
         <input type="hidden" name="JM_SETTINGS_SCOPE" value="jellyfin">
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.05s;">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="jellyfin" style="animation-delay: 0.05s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-primary/20 rounded-lg flex items-center justify-center mr-3 text-primary">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
@@ -83,8 +115,8 @@
 
         <!-- Security -->
         <form action="/settings" method="POST">
-        <input type="hidden" name="JM_SETTINGS_SCOPE" value="security">
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.1s;">
+        <input type="hidden" name="JM_SETTINGS_SCOPE" value="jellyfin">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="jellyfin" style="animation-delay: 0.1s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-danger/20 rounded-lg flex items-center justify-center mr-3 text-danger">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
@@ -138,7 +170,7 @@
         <!-- Telegram 通知 -->
         <form action="/settings" method="POST">
         <input type="hidden" name="JM_SETTINGS_SCOPE" value="telegram">
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.12s;">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="telegram" style="animation-delay: 0.12s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-info/20 rounded-lg flex items-center justify-center mr-3 text-info">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
@@ -153,7 +185,7 @@
                 <div class="col-span-2">
                     <label class="inline-flex items-center text-sm text-slate-300">
                         <input type="checkbox" name="JM_TELEGRAM_ENABLED" class="w-4 h-4 rounded bg-slate-800 border-slate-700 text-info focus:ring-info focus:ring-offset-slate-900 transition-colors cursor-pointer" {% if settings.telegram_enabled %}checked{% endif %}>
-                        <span class="ml-2">启动敏感通知</span>
+                        <span class="ml-2">启用敏感通知对象</span>
                     </label>
                 </div>
                 <div class="col-span-2 md:col-span-1">
@@ -165,12 +197,24 @@
                         </div>
                     </div>
                     <input type="password" name="JM_TELEGRAM_BOT_TOKEN" class="w-full bg-slate-800/50 border border-slate-700 focus:border-info focus:ring-1 focus:ring-info rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono placeholder-slate-600" placeholder="留空则不修改 (已隐藏)">
-                    <p class="text-xs text-slate-500 mt-1">从 @BotFather 获取的 Bot Token</p>
+                    <p class="text-xs text-slate-500 mt-1">从 @BotFather 获取的 Bot Token，敏感/非敏感通知共用这一项</p>
                 </div>
                 <div class="col-span-2 md:col-span-1">
                     <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">User ID / Chat ID</label>
                     <input type="text" name="JM_TELEGRAM_USER_ID" value="{{ settings.telegram_user_id }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-info focus:ring-1 focus:ring-info rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono placeholder-slate-600" placeholder="123456789, -100123456789">
-                    <p class="text-xs text-slate-500 mt-1">接收通知的 Telegram 用户/群组 ID，支持多个（逗号分隔）</p>
+                    <p class="text-xs text-slate-500 mt-1">接收敏感通知的 Telegram 用户/群组 ID，支持多个（逗号分隔）</p>
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">敏感通知类型</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {% for item in telegram_notify_options %}
+                        <label class="inline-flex items-center rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2 text-sm text-slate-300">
+                            <input type="checkbox" name="JM_TELEGRAM_NOTIFY_TYPES" value="{{ item.key }}" class="w-4 h-4 rounded bg-slate-800 border-slate-700 text-info focus:ring-info focus:ring-offset-slate-900" {% if item.key in telegram_notify_enabled_types %}checked{% endif %}>
+                            <span class="ml-2">{{ item.label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <p class="text-xs text-slate-500 mt-2">未勾选任何类型时将完全关闭敏感通知内容发送。</p>
                 </div>
             </div>
             <div class="mt-6 pt-6 border-t border-slate-700/50">
@@ -179,31 +223,33 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     </div>
                     <div>
-                        <h3 class="text-sm font-bold text-white">非敏感通知 Bot</h3>
-                        <p class="text-xs text-slate-400">用于备份结果等非敏感通知（不包含密码）</p>
+                        <h3 class="text-sm font-bold text-white">非敏感通知对象</h3>
+                        <p class="text-xs text-slate-400">使用上方同一个 Bot Token，仅发送对象和勾选类型不同</p>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="col-span-2">
                         <label class="inline-flex items-center text-sm text-slate-300">
                             <input type="checkbox" name="JM_TELEGRAM_PUBLIC_ENABLED" class="w-4 h-4 rounded bg-slate-800 border-slate-700 text-info focus:ring-info focus:ring-offset-slate-900 transition-colors cursor-pointer" {% if settings.telegram_public_enabled %}checked{% endif %}>
-                            <span class="ml-2">启用非敏感通知 Bot</span>
+                            <span class="ml-2">启用非敏感通知对象</span>
                         </label>
-                    </div>
-                    <div class="col-span-2 md:col-span-1">
-                        <div class="flex items-center justify-between mb-2">
-                            <label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Bot Token</label>
-                            <div class="flex items-center">
-                                <input type="checkbox" id="clear_jm_telegram_public_bot_token" name="CLEAR_JM_TELEGRAM_PUBLIC_BOT_TOKEN" class="w-3.5 h-3.5 rounded bg-slate-800 border-slate-700 text-primary focus:ring-primary focus:ring-offset-slate-900 transition-colors cursor-pointer">
-                                <label for="clear_jm_telegram_public_bot_token" class="ml-1.5 text-xs text-slate-500 hover:text-slate-300 cursor-pointer select-none transition-colors">清空</label>
-                            </div>
-                        </div>
-                        <input type="password" name="JM_TELEGRAM_PUBLIC_BOT_TOKEN" class="w-full bg-slate-800/50 border border-slate-700 focus:border-info focus:ring-1 focus:ring-info rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono placeholder-slate-600" placeholder="留空则不修改 (已隐藏)">
                     </div>
                     <div class="col-span-2 md:col-span-1">
                         <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">User ID / Chat ID</label>
                         <input type="text" name="JM_TELEGRAM_PUBLIC_USER_ID" value="{{ settings.telegram_public_user_id }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-info focus:ring-1 focus:ring-info rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono placeholder-slate-600" placeholder="123456789, -100123456789">
                         <p class="text-xs text-slate-500 mt-1">接收非敏感通知的 Telegram 用户/群组 ID</p>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">非敏感通知类型</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {% for item in telegram_public_notify_options %}
+                            <label class="inline-flex items-center rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2 text-sm text-slate-300">
+                                <input type="checkbox" name="JM_TELEGRAM_PUBLIC_NOTIFY_TYPES" value="{{ item.key }}" class="w-4 h-4 rounded bg-slate-800 border-slate-700 text-info focus:ring-info focus:ring-offset-slate-900" {% if item.key in telegram_public_notify_enabled_types %}checked{% endif %}>
+                                <span class="ml-2">{{ item.label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2">未勾选任何类型时将完全关闭非敏感通知内容发送。</p>
                     </div>
                 </div>
             </div>
@@ -215,7 +261,7 @@
 
         <form action="/settings" method="POST" id="library-scan-form">
         <input type="hidden" name="JM_SETTINGS_SCOPE" value="library_scan">
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.18s;">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="library_scan" style="animation-delay: 0.18s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-primary/20 rounded-lg flex items-center justify-center mr-3 text-primary">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -278,7 +324,7 @@
         <!-- Backup -->
         <form action="/settings" method="POST">
         <input type="hidden" name="JM_SETTINGS_SCOPE" value="backup">
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.2s;">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="backup" style="animation-delay: 0.2s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-success/20 rounded-lg flex items-center justify-center mr-3 text-success">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16M4 17h16M7 7v10"></path></svg>
@@ -349,7 +395,7 @@
         <!-- Schedules -->
         <form action="/settings" method="POST">
         <input type="hidden" name="JM_SETTINGS_SCOPE" value="schedules">
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.25s;">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="schedules" style="animation-delay: 0.25s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-primary/20 rounded-lg flex items-center justify-center mr-3 text-primary">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -375,6 +421,11 @@
                     <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">DNS 刷新间隔 (分钟)</label>
                     <input type="number" step="1" name="JM_DNS_REFRESH_INTERVAL_MINUTES" value="{{ settings.dns_refresh_interval_minutes }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono">
                     <p class="text-xs text-slate-500 mt-1">默认 4 分钟</p>
+                </div>
+                <div class="md:col-span-3">
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">StartJ 分类规则获取地址</label>
+                    <input type="text" name="JM_STARTJ_URL" value="{{ settings.startj_url }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-primary focus:ring-1 focus:ring-primary rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono placeholder-slate-600" placeholder="https://example.com/startj.html">
+                    <p class="text-xs text-slate-500 mt-1">保存后分类池会从这个地址拉取；留空表示不抓取远程地址。</p>
                 </div>
                 <div class="col-span-3 border-t border-slate-700/40 pt-4">
                     <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">设备清理</div>
@@ -448,7 +499,7 @@
         <!-- Server Stream Monitor -->
         <form action="/settings" method="POST">
         <input type="hidden" name="JM_SETTINGS_SCOPE" value="stream">
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.3s;">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="stream" style="animation-delay: 0.3s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-warning/20 rounded-lg flex items-center justify-center mr-3 text-warning">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l10 7-10 6z"></path></svg>
@@ -468,10 +519,7 @@
                 <textarea name="JM_STREAM_SERVERS_JSON" rows="4" class="w-full bg-slate-800/50 border border-slate-700 focus:border-warning focus:ring-1 focus:ring-warning rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono" placeholder='[{"veid":"123","api_key":"private_xxx","mark":"vps-1"}]'></textarea>
             </div>
 
-            <label class="inline-flex items-center text-sm text-slate-300">
-                <input type="checkbox" name="CLEAR_JM_STREAM_SERVERS" class="w-4 h-4 rounded bg-slate-800 border-slate-700 text-warning focus:ring-warning focus:ring-offset-slate-900 transition-colors cursor-pointer">
-                <span class="ml-2">清空已保存服务器列表</span>
-            </label>
+            <p class="text-xs text-slate-500">保存时会在现有服务器列表基础上追加/更新，并按 VEID 自动去重。</p>
             <div class="flex justify-end pt-6">
                 <button type="submit" class="bg-primary hover:bg-primary-hover text-white font-bold py-2.5 px-8 rounded-lg shadow-lg shadow-primary/20 transition-all">保存本栏</button>
             </div>
@@ -552,7 +600,7 @@
         </script>
 
         <!-- 数据库维护 -->
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.32s;">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="backup" style="animation-delay: 0.32s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-slate-700/40 rounded-lg flex items-center justify-center mr-3 text-slate-300">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -569,7 +617,7 @@
         </section>
 
         <!-- Settings Import/Export -->
-        <section class="glass-panel p-6 rounded-xl animate-fade-in" style="animation-delay: 0.35s;">
+        <section class="glass-panel p-6 rounded-xl animate-fade-in settings-panel" data-settings-panel="backup" style="animation-delay: 0.35s;">
             <div class="flex items-center mb-6 pb-4 border-b border-slate-700/50">
                 <div class="h-8 w-8 bg-danger/20 rounded-lg flex items-center justify-center mr-3 text-danger">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7m-4 4l-4-4m0 0l-4 4m4-4v12"></path></svg>
@@ -631,6 +679,44 @@
         const body = document.getElementById('library-scan-items');
         const addBtn = document.getElementById('add-lib');
         const form = document.getElementById('library-scan-form');
+        const settingsPanels = Array.from(document.querySelectorAll('.settings-panel'));
+        const navCards = Array.from(document.querySelectorAll('.settings-nav-card'));
+        const scopeSource = document.getElementById('settings-scope-source');
+        const scopeFromServer = scopeSource?.dataset.currentScope || '';
+        const scopeAliases = {
+            security: 'jellyfin',
+            maintenance: 'backup',
+            all: 'jellyfin',
+        };
+
+        const applySettingsScope = (target) => {
+            const normalized = scopeAliases[target || ''] || target || 'jellyfin';
+            settingsPanels.forEach((panel) => {
+                const panelScope = panel.dataset.settingsPanel || '';
+                const show = panelScope === normalized;
+                panel.classList.toggle('hidden', !show);
+            });
+            navCards.forEach((card) => {
+                const active = (card.dataset.settingsTarget || 'jellyfin') === normalized;
+                card.classList.toggle('border-primary', active);
+                card.classList.toggle('bg-primary/15', active);
+                card.classList.toggle('shadow-lg', active);
+                card.classList.toggle('shadow-primary/10', active);
+            });
+            sessionStorage.setItem('jm_settings_scope', normalized);
+        };
+
+        if (navCards.length && settingsPanels.length) {
+            const params = new URLSearchParams(window.location.search);
+            const scopeFromQuery = params.get('scope') || '';
+            const initialScope = scopeFromQuery || scopeFromServer || sessionStorage.getItem('jm_settings_scope') || 'jellyfin';
+            applySettingsScope(initialScope);
+            navCards.forEach((card) => {
+                card.addEventListener('click', () => {
+                    applySettingsScope(card.dataset.settingsTarget || 'jellyfin');
+                });
+            });
+        }
 
         if (addBtn && body) {
             addBtn.addEventListener('click', () => {

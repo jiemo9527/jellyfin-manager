@@ -12,6 +12,7 @@ import requests
 from jm_manager.users_store import list_users
 
 from jm_manager.db import Db, connect
+from jm_manager.paths import default_db_path
 from jm_manager.runtime_settings import RuntimeSettings, load_runtime_settings
 
 
@@ -22,13 +23,18 @@ logging.basicConfig(
 logger = logging.getLogger("jm_admin_bot")
 
 TZ_UTC8 = timezone(timedelta(hours=8))
-DB_PATH = os.getenv("JM_DB_PATH", str(os.path.join("data", "jellyfin_manager.db"))).strip()
+DB_PATH = default_db_path()
 POLL_TIMEOUT = 30
 SETTINGS_TTL = 15
 
 PLAN_HINT = "1=普通一天 2=普通月卡 3=普通季卡 4=普通年卡 5=专线一天 6=专线月卡 7=专线季卡 8=专线年卡"
 
 PENDING: dict[str, dict[str, Any]] = {}
+
+SCAN_MODE_OPTIONS: list[tuple[str, str]] = [
+    ("default", "默认（扫描新内容）"),
+    ("missing_and_images", "扫描缺少内容并刷新图片"),
+]
 
 
 def _default_manager_url() -> str:
@@ -161,14 +167,13 @@ def _menu_markup() -> dict[str, Any]:
             ],
             [
                 {"text": "改套餐", "callback_data": "change_plan"},
-                {"text": "刷新全部库", "callback_data": "scan_all"},
-            ],
-            [
                 {"text": "刷新指定库", "callback_data": "scan_one"},
-                {"text": "手动备份", "callback_data": "backup"},
             ],
             [
+                {"text": "手动备份", "callback_data": "backup"},
                 {"text": "查询流量", "callback_data": "stream"},
+            ],
+            [
                 {"text": "列出用户", "callback_data": "list_users"},
             ],
         ]
@@ -183,6 +188,15 @@ def _library_keyboard(items: list[dict[str, str]]) -> dict[str, Any]:
         if not code:
             continue
         rows.append([{"text": f"{name or code}", "callback_data": f"scan_pick:{code}"}])
+    return {"inline_keyboard": rows}
+
+
+def _scan_mode_keyboard(code: str) -> dict[str, Any]:
+    rows: list[list[dict[str, str]]] = []
+    for key, label in SCAN_MODE_OPTIONS:
+        rows.append([
+            {"text": label, "callback_data": f"scan_mode:{code}:{key}"},
+        ])
     return {"inline_keyboard": rows}
 
 
@@ -357,10 +371,6 @@ def _handle_callback(token: str, rt: RuntimeSettings, chat_id: str, data: str) -
             text = header + "\n" + "\n".join(chunk)
             _send_message(token, chat_id, text)
         return
-    if data == "scan_all":
-        res = _manager_request(rt, "POST", "/api/tasks/library-scan")
-        _send_message(token, chat_id, f"刷新全部库结果：{res}")
-        return
     if data == "backup":
         res = _manager_request(rt, "POST", "/api/tasks/backup")
         _send_message(token, chat_id, f"手动备份触发结果：{res}")
@@ -413,8 +423,19 @@ def _handle_callback(token: str, rt: RuntimeSettings, chat_id: str, data: str) -
         return
     if data.startswith("scan_pick:"):
         code = data.split(":", 1)[-1]
-        res = _manager_request(rt, "POST", f"/api/tasks/library-scan/{code}")
-        _send_message(token, chat_id, f"刷新库结果：{res}")
+        items = _load_library_items()
+        target_name = code
+        for item in items:
+            if str(item.get("code") or "").strip() == code:
+                target_name = str(item.get("name") or code)
+                break
+        _send_message(token, chat_id, f"请选择扫描方式：{target_name}", _scan_mode_keyboard(code))
+        return
+    if data.startswith("scan_mode:"):
+        _, code, scan_mode = data.split(":", 2)
+        res = _manager_request(rt, "POST", f"/api/tasks/library-scan/{code}?scan_mode={scan_mode}")
+        label = next((name for key, name in SCAN_MODE_OPTIONS if key == scan_mode), scan_mode)
+        _send_message(token, chat_id, f"刷新库结果（{label}）：{res}")
         return
 
     _send_message(token, chat_id, "未知操作，请发送 /menu。")

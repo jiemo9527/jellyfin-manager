@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import json
 import re
+import urllib3
 from datetime import datetime, timedelta
 from typing import Any
 
 import requests
 
 from jm_manager.db import Db, connect
+from jm_manager.runtime_settings import load_runtime_settings
 from jm_manager.utils import now_shanghai, to_iso
 
-#引入外部集群端点url
-STARTJ_URL = """startj_url"""
+
+def _load_startj_url(db: Db) -> str:
+    return str(load_runtime_settings(db).startj_url or "").strip()
 
 
 def _get_cached(db: Db) -> tuple[dict[str, list[str]] | None, datetime | None]:
@@ -64,14 +67,17 @@ def _set_cached(db: Db, pools: dict[str, list[str]]) -> None:
         conn.close()
 
 
-def fetch_startj_pools(*, timeout: int = 10) -> dict[str, list[str]]:
+def fetch_startj_pools(db: Db, *, timeout: int = 10) -> dict[str, list[str]]:
     # startj 站点证书可能不标准：这里采用 verify=False。
     # 注意：这不影响 Jellyfin 访问（Jellyfin 仍按你填写的 http/https 访问）。
+    startj_url = _load_startj_url(db)
+    if not startj_url:
+        raise ValueError("startj_url 未配置")
     try:
-        requests.packages.urllib3.disable_warnings()  # type: ignore[attr-defined]
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     except Exception:
         pass
-    r = requests.get(STARTJ_URL, timeout=timeout, verify=False)
+    r = requests.get(startj_url, timeout=timeout, verify=False)
     r.raise_for_status()
     html = r.text
 
@@ -106,18 +112,29 @@ def fetch_startj_pools(*, timeout: int = 10) -> dict[str, list[str]]:
 
 
 def get_startj_pools(db: Db, *, ttl_seconds: int = 600) -> dict[str, list[str]]:
+    pools, _ = refresh_startj_pools(db, ttl_seconds=ttl_seconds)
+    return pools
+
+
+def get_cached_startj_pools(db: Db) -> dict[str, list[str]]:
+    cached, _ = _get_cached(db)
+    return cached or {}
+
+
+def refresh_startj_pools(db: Db, *, ttl_seconds: int = 600) -> tuple[dict[str, list[str]], bool]:
     cached, ts = _get_cached(db)
     if cached and ts:
         try:
             if now_shanghai() - ts <= timedelta(seconds=ttl_seconds):
-                return cached
+                return cached, False
         except Exception:
-            return cached
+            return cached, False
 
     try:
-        pools = fetch_startj_pools(timeout=12)
+        pools = fetch_startj_pools(db, timeout=12)
     except Exception:
-        return cached or {}
-    if pools:
+        return cached or {}, False
+    changed = pools != (cached or {})
+    if pools and changed:
         _set_cached(db, pools)
-    return pools
+    return pools, changed

@@ -4,7 +4,26 @@
 
 {% block content %}
 <div class="max-w-6xl mx-auto pb-12 mobile-compact">
-    <details class="glass-panel rounded-xl overflow-hidden animate-fade-in" open>
+    <div class="mb-6 sticky top-0 z-[5]">
+        <div class="glass-panel rounded-xl p-3 border border-slate-700/50 backdrop-blur-md">
+            <div class="flex gap-3 overflow-x-auto pb-1" id="server-stream-nav-cards">
+                <button type="button" data-stream-target="traffic" class="stream-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-warning/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">流量统计</div>
+                    <div class="text-[11px] text-slate-400 mt-1">实时流量与重置</div>
+                </button>
+                <button type="button" data-stream-target="saved" class="stream-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-warning/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">已保存服务器</div>
+                    <div class="text-[11px] text-slate-400 mt-1">删除与管理</div>
+                </button>
+                <button type="button" data-stream-target="dns" class="stream-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-warning/50 hover:bg-slate-800/80">
+                    <div class="text-sm font-bold text-white">DNS 查询</div>
+                    <div class="text-[11px] text-slate-400 mt-1">nslookup 工具</div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <details class="glass-panel rounded-xl overflow-hidden animate-fade-in stream-panel" data-stream-panel="traffic" open>
         <summary class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between cursor-pointer select-none mobile-compact-header">
             <div>
                 <h3 class="font-bold text-white">流量与重置时间</h3>
@@ -42,13 +61,15 @@
         已保存：{{ server_marks|length }} 台{% if server_marks %}（{{ server_marks|join('，') }}）{% endif %}
     </div>
 
-    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mt-6" style="animation-delay: 0.05s;">
+    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mt-6 stream-panel" data-stream-panel="saved" style="animation-delay: 0.05s;">
         <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between mobile-compact-header">
             <div>
                 <h3 class="font-bold text-white">已保存服务器管理</h3>
                 <div class="text-xs text-slate-500 mt-1">删除单项会同步更新服务器流量监控配置</div>
             </div>
-            <a href="/settings" class="text-xs text-warning hover:text-white transition-colors">去设置追加</a>
+            <div class="flex items-center gap-3">
+                <a href="/settings?scope=stream" class="text-xs text-warning hover:text-white transition-colors">去设置追加</a>
+            </div>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse mobile-compact-table">
@@ -84,7 +105,7 @@
         </div>
     </div>
 
-    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mt-6" style="animation-delay: 0.1s;">
+    <div class="glass-panel rounded-xl overflow-hidden animate-fade-in mt-6 stream-panel" data-stream-panel="dns" style="animation-delay: 0.1s;">
         <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between mobile-compact-header">
             <div>
                 <h3 class="font-bold text-white">nslookup {{ ns_host }}</h3>
@@ -93,7 +114,7 @@
         </div>
         <div class="px-6 py-4 border-b border-slate-700/50">
             <form action="/server-stream" method="GET" class="flex flex-col md:flex-row gap-3">
-                <input type="text" name="host" value="{{ ns_host }}" class="w-full md:w-80 bg-slate-800/50 border border-slate-700 focus:border-warning focus:ring-1 focus:ring-warning rounded-lg px-4 py-2 text-sm text-white transition-all font-mono" placeholder="0vid.de">
+                <input type="text" name="host" value="{{ ns_host }}" class="w-full md:w-80 bg-slate-800/50 border border-slate-700 focus:border-warning focus:ring-1 focus:ring-warning rounded-lg px-4 py-2 text-sm text-white transition-all font-mono" placeholder="{{ ns_default_host }}">
                 <button type="submit" class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-white">查询</button>
             </form>
         </div>
@@ -134,6 +155,34 @@
             }
         }
 
-    document.addEventListener('DOMContentLoaded', refreshServers);
+    document.addEventListener('DOMContentLoaded', () => {
+        refreshServers();
+
+        const panels = Array.from(document.querySelectorAll('.stream-panel'));
+        const cards = Array.from(document.querySelectorAll('.stream-nav-card'));
+        const applyScope = (target) => {
+            const normalized = target || 'traffic';
+            panels.forEach((panel) => {
+                const scope = panel.dataset.streamPanel || '';
+                panel.classList.toggle('hidden', scope !== normalized);
+            });
+            cards.forEach((card) => {
+                const active = (card.dataset.streamTarget || 'traffic') === normalized;
+                card.classList.toggle('border-warning', active);
+                card.classList.toggle('bg-warning/15', active);
+                card.classList.toggle('shadow-lg', active);
+                card.classList.toggle('shadow-warning/10', active);
+            });
+            sessionStorage.setItem('jm_server_stream_scope', normalized);
+        };
+
+        if (panels.length && cards.length) {
+            const initialScope = sessionStorage.getItem('jm_server_stream_scope') || 'traffic';
+            applyScope(initialScope);
+            cards.forEach((card) => {
+                card.addEventListener('click', () => applyScope(card.dataset.streamTarget || 'all'));
+            });
+        }
+    });
 </script>
 {% endblock %}

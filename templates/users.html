@@ -211,19 +211,23 @@
         document.getElementById('plan-modal').classList.remove('hidden');
     }
 
-    function confirmDelete(uid, username) {
-        if(confirm(`警告：确定要永久删除用户 ${username} 吗？此操作无法撤销！`)) {
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '/users/delete';
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'user_id';
-            input.value = uid;
-            form.appendChild(input);
-            document.body.appendChild(form);
-            form.submit();
-        }
+    async function confirmDelete(uid, username) {
+        const ok = await jmConfirm(`警告：确定要永久删除用户 ${username} 吗？此操作无法撤销！`, {
+            title: '删除用户',
+            confirmText: '永久删除',
+            danger: true,
+        });
+        if (!ok) return;
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/users/delete';
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'user_id';
+        input.value = uid;
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
     }
 
     // Simple search filter

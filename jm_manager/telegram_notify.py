@@ -28,6 +28,58 @@ NOTIFY_USER_AUTO_DISABLED = "user_auto_disabled"
 NOTIFY_USER_AUTO_DELETED = "user_auto_deleted"
 NOTIFY_USER_BAN_KICK = "user_ban_kick"
 NOTIFY_STREAM_USAGE_HIGH = "stream_usage_high"
+NOTIFY_PUBLIC_BACKUP_RESULT = "backup_result"
+NOTIFY_PUBLIC_USER_EXPIRING = "user_expiring"
+NOTIFY_PUBLIC_USER_AUTO_DISABLED = "user_auto_disabled"
+
+NOTIFY_NONE = "__none__"
+
+TELEGRAM_NOTIFY_TYPE_OPTIONS = [
+    {"key": NOTIFY_USER_CREATED, "label": "用户创建"},
+    {"key": NOTIFY_USER_DISABLED, "label": "手动禁用"},
+    {"key": NOTIFY_USER_ENABLED, "label": "手动启用"},
+    {"key": NOTIFY_USER_EXTENDED, "label": "用户续期"},
+    {"key": NOTIFY_USER_PLAN_CHANGED, "label": "套餐变更"},
+    {"key": NOTIFY_USER_DELETED, "label": "用户删除"},
+    {"key": NOTIFY_USER_IMPORTED, "label": "批量导入"},
+    {"key": NOTIFY_USER_AUTO_DISABLED, "label": "到期自动禁用"},
+    {"key": NOTIFY_USER_AUTO_DELETED, "label": "到期自动删除"},
+    {"key": NOTIFY_USER_BAN_KICK, "label": "分流剔除"},
+    {"key": NOTIFY_STREAM_USAGE_HIGH, "label": "流量告警"},
+    {"key": NOTIFY_PUBLIC_BACKUP_RESULT, "label": "备份结果"},
+    {"key": NOTIFY_PUBLIC_USER_EXPIRING, "label": "用户即将到期"},
+]
+TELEGRAM_PUBLIC_NOTIFY_TYPE_OPTIONS = TELEGRAM_NOTIFY_TYPE_OPTIONS
+
+
+def _option_keys(options: list[dict[str, str]]) -> set[str]:
+    return {str(item.get("key") or "") for item in options if item.get("key")}
+
+
+def _enabled_notify_types(raw: str, options: list[dict[str, str]]) -> set[str]:
+    allowed = _option_keys(options)
+    value = str(raw or "").strip()
+    if not value:
+        return set(allowed)
+    if value == NOTIFY_NONE:
+        return set()
+    return {part.strip() for part in value.split(",") if part.strip() in allowed}
+
+
+def enabled_telegram_notify_types(rt: RuntimeSettings) -> set[str]:
+    return _enabled_notify_types(rt.telegram_notify_types, TELEGRAM_NOTIFY_TYPE_OPTIONS)
+
+
+def enabled_telegram_public_notify_types(rt: RuntimeSettings) -> set[str]:
+    return _enabled_notify_types(rt.telegram_public_notify_types, TELEGRAM_PUBLIC_NOTIFY_TYPE_OPTIONS)
+
+
+def telegram_notify_type_enabled(rt: RuntimeSettings, notify_type: str) -> bool:
+    return str(notify_type or "").strip() in enabled_telegram_notify_types(rt)
+
+
+def telegram_public_notify_type_enabled(rt: RuntimeSettings, notify_type: str) -> bool:
+    return str(notify_type or "").strip() in enabled_telegram_public_notify_types(rt)
 
 
 def _format_datetime(value: str) -> str:
@@ -85,6 +137,7 @@ def _format_message(notify_type: str, data: dict[str, Any]) -> str:
         return "\n".join(
             [
                 "🎉 用户创建成功！",
+                "📱 推荐客户端：安卓yamby、vidhub/苹果infuse、senplayer/Win 小幻影视、hills-lite",
                 f"📦 套餐类型: {plan_name or '未知'}",
                 f"🌐 服务器地址: {server_address or '未配置'}",
                 f"👤 用户名: {username}",
@@ -219,6 +272,8 @@ def send_telegram_notification(
     """
     if not rt.telegram_enabled:
         return False
+    if not telegram_notify_type_enabled(rt, notify_type):
+        return False
 
     if not rt.telegram_bot_token or not rt.telegram_user_id:
         logger.warning("Telegram 通知已启用但缺少配置（Bot Token 或 User ID）")
@@ -317,11 +372,15 @@ def send_telegram_public_notification(
     rt: RuntimeSettings,
     message: str,
     *,
+    notify_type: str = "",
     sync: bool = False,
 ) -> bool:
     if not rt.telegram_public_enabled:
         return False
-    if not rt.telegram_public_bot_token or not rt.telegram_public_user_id:
+    if notify_type and not telegram_public_notify_type_enabled(rt, notify_type):
+        return False
+    bot_token = rt.telegram_bot_token
+    if not bot_token or not rt.telegram_public_user_id:
         logger.warning("Telegram 公共通知已启用但缺少配置（Bot Token 或 User ID）")
         return False
 
@@ -332,7 +391,7 @@ def send_telegram_public_notification(
 
     def _send_to_one(chat_id: str) -> bool:
         try:
-            url = f"https://api.telegram.org/bot{rt.telegram_public_bot_token}/sendMessage"
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
             payload = {
                 "chat_id": chat_id,
                 "text": message,
@@ -405,7 +464,7 @@ def notify_public_backup_result(
     )
     if not ok and error:
         msg += f"\n❗ 错误: {error}"
-    send_telegram_public_notification(rt, msg)
+    send_telegram_public_notification(rt, msg, notify_type=NOTIFY_PUBLIC_BACKUP_RESULT)
 
 
 def notify_public_user_expiring(rt: RuntimeSettings, *, username: str, expiration_date: str, days_left: int) -> None:
@@ -416,7 +475,7 @@ def notify_public_user_expiring(rt: RuntimeSettings, *, username: str, expiratio
         f"⏰ 到期时间: {exp_fmt}\n"
         f"📆 剩余天数: {days_left}"
     )
-    send_telegram_public_notification(rt, msg)
+    send_telegram_public_notification(rt, msg, notify_type=NOTIFY_PUBLIC_USER_EXPIRING)
 
 
 def notify_public_user_auto_disabled(rt: RuntimeSettings, *, username: str, expiration_date: str) -> None:
@@ -426,7 +485,7 @@ def notify_public_user_auto_disabled(rt: RuntimeSettings, *, username: str, expi
         f"👤 用户: {username}\n"
         f"⏰ 到期时间: {exp_fmt}"
     )
-    send_telegram_public_notification(rt, msg)
+    send_telegram_public_notification(rt, msg, notify_type=NOTIFY_PUBLIC_USER_AUTO_DISABLED)
 
 
 def notify_user_created(
