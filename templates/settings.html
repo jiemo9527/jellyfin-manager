@@ -44,7 +44,7 @@
                 </button>
                 <button type="button" data-settings-target="telegram" class="settings-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-primary/50 hover:bg-slate-800/80">
                     <div class="text-sm font-bold text-white">Telegram</div>
-                    <div class="text-[11px] text-slate-400 mt-1">通知接收</div>
+                    <div class="text-[11px] text-slate-400 mt-1">通知接收 / 管理员 Bot</div>
                 </button>
                 <button type="button" data-settings-target="library_scan" class="settings-nav-card shrink-0 min-w-[132px] rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-all hover:border-primary/50 hover:bg-slate-800/80">
                     <div class="text-sm font-bold text-white">媒体库</div>
@@ -176,8 +176,8 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
                 </div>
                 <div>
-                    <h2 class="text-lg font-bold text-white">Telegram 通知</h2>
-                    <p class="text-xs text-slate-400">用户变更时发送通知到 Telegram</p>
+                    <h2 class="text-lg font-bold text-white">Telegram 通知 / 管理员 Bot</h2>
+                    <p class="text-xs text-slate-400">用户变更通知与管理员 Bot 指令共用 Bot Token</p>
                 </div>
             </div>
 
@@ -197,12 +197,13 @@
                         </div>
                     </div>
                     <input type="password" name="JM_TELEGRAM_BOT_TOKEN" class="w-full bg-slate-800/50 border border-slate-700 focus:border-info focus:ring-1 focus:ring-info rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono placeholder-slate-600" placeholder="留空则不修改 (已隐藏)">
-                    <p class="text-xs text-slate-500 mt-1">从 @BotFather 获取的 Bot Token，敏感/非敏感通知共用这一项</p>
+                    <p class="text-xs text-slate-500 mt-1">从 @BotFather 获取的 Bot Token，通知和管理员 Bot 共用这一项</p>
                 </div>
                 <div class="col-span-2 md:col-span-1">
-                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">User ID / Chat ID</label>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">敏感通知 / 管理员 Bot User ID / Chat ID</label>
                     <input type="text" name="JM_TELEGRAM_USER_ID" value="{{ settings.telegram_user_id }}" class="w-full bg-slate-800/50 border border-slate-700 focus:border-info focus:ring-1 focus:ring-info rounded-lg px-4 py-2.5 text-sm text-white transition-all font-mono placeholder-slate-600" placeholder="123456789, -100123456789">
-                    <p class="text-xs text-slate-500 mt-1">接收敏感通知的 Telegram 用户/群组 ID，支持多个（逗号分隔）</p>
+                    <p class="text-xs text-slate-500 mt-1">接收敏感通知的 Telegram 用户/群组 ID，支持多个（逗号分隔）；这些 ID 同时是管理员 Bot 授权对象。</p>
+                    <p class="text-xs text-slate-500 mt-1">关闭敏感通知只影响通知发送，管理员 Bot 仍会使用这里的 ID 鉴权。</p>
                 </div>
                 <div class="col-span-2">
                     <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">敏感通知类型</label>

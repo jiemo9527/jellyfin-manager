@@ -447,7 +447,7 @@ def main() -> None:
     while True:
         rt = _load_rt_cached(state)
         if not rt or not rt.telegram_bot_token:
-            logger.warning("敏感通知 Bot 未配置，等待...")
+            logger.warning("Telegram Bot Token 未配置，等待...")
             time.sleep(10)
             continue
         allowed = _authorized_chat_ids(rt)
