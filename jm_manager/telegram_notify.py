@@ -49,7 +49,9 @@ TELEGRAM_NOTIFY_TYPE_OPTIONS = [
     {"key": NOTIFY_PUBLIC_BACKUP_RESULT, "label": "备份结果"},
     {"key": NOTIFY_PUBLIC_USER_EXPIRING, "label": "用户即将到期"},
 ]
-TELEGRAM_PUBLIC_NOTIFY_TYPE_OPTIONS = TELEGRAM_NOTIFY_TYPE_OPTIONS
+TELEGRAM_PUBLIC_NOTIFY_TYPE_OPTIONS = [
+    item for item in TELEGRAM_NOTIFY_TYPE_OPTIONS if item.get("key") != NOTIFY_USER_CREATED
+]
 
 
 def _option_keys(options: list[dict[str, str]]) -> set[str]:
@@ -248,6 +250,84 @@ def _parse_user_ids(user_id_str: str) -> list[str]:
     return ids
 
 
+def _send_telegram_message_to_ids(
+    *,
+    bot_token: str,
+    user_id_str: str,
+    message: str,
+    channel_label: str,
+    sync: bool = False,
+) -> bool:
+    user_ids = _parse_user_ids(user_id_str)
+    if not user_ids:
+        logger.warning(f"{channel_label} 已启用但 User ID 列表为空")
+        return False
+
+    def _send_to_one(chat_id: str) -> bool:
+        try:
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "HTML",
+            }
+            resp = requests.post(url, json=payload, timeout=10)
+            if resp.status_code == 200:
+                result = resp.json()
+                if result.get("ok"):
+                    logger.info(f"{channel_label} 发送成功 -> {chat_id}")
+                    return True
+                logger.warning(f"{channel_label} API 返回错误 (chat_id={chat_id}): {result}")
+                return False
+            logger.warning(f"{channel_label} 发送失败 (chat_id={chat_id}): HTTP {resp.status_code}")
+            return False
+        except requests.exceptions.Timeout:
+            logger.warning(f"{channel_label} 发送超时 (chat_id={chat_id})")
+            return False
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"{channel_label} 发送异常 (chat_id={chat_id}): {e}")
+            return False
+        except Exception as e:
+            logger.warning(f"{channel_label} 发送未知错误 (chat_id={chat_id}): {e}")
+            return False
+
+    def _do_send_all() -> bool:
+        success_count = 0
+        for uid in user_ids:
+            if _send_to_one(uid):
+                success_count += 1
+        return success_count == len(user_ids)
+
+    if sync:
+        return _do_send_all()
+    t = threading.Thread(target=_do_send_all, daemon=True)
+    t.start()
+    return True
+
+
+def send_telegram_sensitive_message(
+    rt: RuntimeSettings,
+    message: str,
+    *,
+    notify_type: str = "",
+    sync: bool = False,
+) -> bool:
+    if not rt.telegram_enabled:
+        return False
+    if notify_type and not telegram_notify_type_enabled(rt, notify_type):
+        return False
+    if not rt.telegram_bot_token or not rt.telegram_user_id:
+        logger.warning("Telegram 敏感通知已启用但缺少配置（Bot Token 或 User ID）")
+        return False
+    return _send_telegram_message_to_ids(
+        bot_token=rt.telegram_bot_token,
+        user_id_str=rt.telegram_user_id,
+        message=message,
+        channel_label="Telegram 敏感通知",
+        sync=sync,
+    )
+
+
 def send_telegram_notification(
     rt: RuntimeSettings,
     notify_type: str,
@@ -265,67 +345,24 @@ def send_telegram_notification(
         sync: 是否同步发送（默认异步）
 
     返回:
-        同步模式下返回是否全部成功；异步模式下始终返回 True（发送结果通过日志记录）
+        至少一个通道进入发送流程时返回 True；异步发送结果通过日志记录
 
     注意:
         telegram_user_id 支持逗号分隔的多个 ID，会依次发送给每个用户/群组
     """
-    if not rt.telegram_enabled:
-        return False
-    if not telegram_notify_type_enabled(rt, notify_type):
-        return False
-
-    if not rt.telegram_bot_token or not rt.telegram_user_id:
-        logger.warning("Telegram 通知已启用但缺少配置（Bot Token 或 User ID）")
-        return False
-
-    user_ids = _parse_user_ids(rt.telegram_user_id)
-    if not user_ids:
-        logger.warning("Telegram 通知已启用但 User ID 列表为空")
-        return False
-
-    message = _format_message(notify_type, data)
-
-    def _send_to_one(chat_id: str) -> bool:
-        try:
-            url = f"https://api.telegram.org/bot{rt.telegram_bot_token}/sendMessage"
-            payload = {
-                "chat_id": chat_id,
-                "text": message,
-                "parse_mode": "HTML",
-            }
-            resp = requests.post(url, json=payload, timeout=10)
-            if resp.status_code == 200:
-                result = resp.json()
-                if result.get("ok"):
-                    logger.info(f"Telegram 通知发送成功: {notify_type} -> {chat_id}")
-                    return True
-                logger.warning(f"Telegram API 返回错误 (chat_id={chat_id}): {result}")
-                return False
-            logger.warning(f"Telegram 通知发送失败 (chat_id={chat_id}): HTTP {resp.status_code}")
-            return False
-        except requests.exceptions.Timeout:
-            logger.warning(f"Telegram 通知发送超时 (chat_id={chat_id})")
-            return False
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"Telegram 通知发送异常 (chat_id={chat_id}): {e}")
-            return False
-        except Exception as e:
-            logger.warning(f"Telegram 通知发送未知错误 (chat_id={chat_id}): {e}")
-            return False
-
-    def _do_send_all() -> bool:
-        success_count = 0
-        for uid in user_ids:
-            if _send_to_one(uid):
-                success_count += 1
-        return success_count == len(user_ids)
-
-    if sync:
-        return _do_send_all()
-    t = threading.Thread(target=_do_send_all, daemon=True)
-    t.start()
-    return True
+    sensitive_ok = send_telegram_sensitive_message(
+        rt,
+        _format_message(notify_type, data),
+        notify_type=notify_type,
+        sync=sync,
+    )
+    public_ok = send_telegram_public_notification(
+        rt,
+        _format_message(notify_type, data),
+        notify_type=notify_type,
+        sync=sync,
+    )
+    return sensitive_ok or public_ok
 
 
 def notify_user_ban_kick(
@@ -383,52 +420,13 @@ def send_telegram_public_notification(
     if not bot_token or not rt.telegram_public_user_id:
         logger.warning("Telegram 公共通知已启用但缺少配置（Bot Token 或 User ID）")
         return False
-
-    user_ids = _parse_user_ids(rt.telegram_public_user_id)
-    if not user_ids:
-        logger.warning("Telegram 公共通知已启用但 User ID 列表为空")
-        return False
-
-    def _send_to_one(chat_id: str) -> bool:
-        try:
-            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-            payload = {
-                "chat_id": chat_id,
-                "text": message,
-                "parse_mode": "HTML",
-            }
-            resp = requests.post(url, json=payload, timeout=10)
-            if resp.status_code == 200:
-                result = resp.json()
-                if result.get("ok"):
-                    logger.info(f"Telegram 公共通知发送成功 -> {chat_id}")
-                    return True
-                logger.warning(f"Telegram 公共通知 API 返回错误 (chat_id={chat_id}): {result}")
-                return False
-            logger.warning(f"Telegram 公共通知发送失败 (chat_id={chat_id}): HTTP {resp.status_code}")
-            return False
-        except requests.exceptions.Timeout:
-            logger.warning(f"Telegram 公共通知发送超时 (chat_id={chat_id})")
-            return False
-        except requests.exceptions.RequestException as e:
-            logger.warning(f"Telegram 公共通知发送异常 (chat_id={chat_id}): {e}")
-            return False
-        except Exception as e:
-            logger.warning(f"Telegram 公共通知发送未知错误 (chat_id={chat_id}): {e}")
-            return False
-
-    def _do_send_all() -> bool:
-        success_count = 0
-        for uid in user_ids:
-            if _send_to_one(uid):
-                success_count += 1
-        return success_count == len(user_ids)
-
-    if sync:
-        return _do_send_all()
-    t = threading.Thread(target=_do_send_all, daemon=True)
-    t.start()
-    return True
+    return _send_telegram_message_to_ids(
+        bot_token=bot_token,
+        user_id_str=rt.telegram_public_user_id,
+        message=message,
+        channel_label="Telegram 非敏感通知",
+        sync=sync,
+    )
 
 
 def notify_public_backup_result(
@@ -464,6 +462,7 @@ def notify_public_backup_result(
     )
     if not ok and error:
         msg += f"\n❗ 错误: {error}"
+    send_telegram_sensitive_message(rt, msg, notify_type=NOTIFY_PUBLIC_BACKUP_RESULT)
     send_telegram_public_notification(rt, msg, notify_type=NOTIFY_PUBLIC_BACKUP_RESULT)
 
 
@@ -475,6 +474,7 @@ def notify_public_user_expiring(rt: RuntimeSettings, *, username: str, expiratio
         f"⏰ 到期时间: {exp_fmt}\n"
         f"📆 剩余天数: {days_left}"
     )
+    send_telegram_sensitive_message(rt, msg, notify_type=NOTIFY_PUBLIC_USER_EXPIRING)
     send_telegram_public_notification(rt, msg, notify_type=NOTIFY_PUBLIC_USER_EXPIRING)
 
 
@@ -485,6 +485,7 @@ def notify_public_user_auto_disabled(rt: RuntimeSettings, *, username: str, expi
         f"👤 用户: {username}\n"
         f"⏰ 到期时间: {exp_fmt}"
     )
+    send_telegram_sensitive_message(rt, msg, notify_type=NOTIFY_PUBLIC_USER_AUTO_DISABLED)
     send_telegram_public_notification(rt, msg, notify_type=NOTIFY_PUBLIC_USER_AUTO_DISABLED)
 
 

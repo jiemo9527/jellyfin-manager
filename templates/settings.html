@@ -21,6 +21,13 @@
     </div>
     {% endif %}
 
+    {% if info %}
+    <div class="mb-6 bg-info/10 border border-info/20 text-info px-4 py-3 rounded-lg flex items-center animate-fade-in">
+        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <span>{{ info }}</span>
+    </div>
+    {% endif %}
+
     {% if missing and missing|length > 0 %}
     <div class="mb-6 bg-warning/10 border border-warning/20 text-warning px-4 py-3 rounded-lg animate-fade-in">
         <div class="flex items-center mb-2">
@@ -250,11 +257,15 @@
                             </label>
                             {% endfor %}
                         </div>
-                        <p class="text-xs text-slate-500 mt-2">未勾选任何类型时将完全关闭非敏感通知内容发送。</p>
+                        <p class="text-xs text-slate-500 mt-2">非敏感对象不支持用户创建通知；未勾选任何类型时将完全关闭非敏感通知内容发送。</p>
                     </div>
                 </div>
             </div>
-            <div class="flex justify-end pt-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-6">
+                <div class="flex flex-wrap gap-2">
+                    <button type="submit" formaction="/settings/telegram-test" name="JM_TELEGRAM_TEST_CHANNEL" value="sensitive" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 px-4 rounded-lg border border-slate-700 transition-all">发送敏感测试</button>
+                    <button type="submit" formaction="/settings/telegram-test" name="JM_TELEGRAM_TEST_CHANNEL" value="public" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 px-4 rounded-lg border border-slate-700 transition-all">发送非敏感测试</button>
+                </div>
                 <button type="submit" class="bg-primary hover:bg-primary-hover text-white font-bold py-2.5 px-8 rounded-lg shadow-lg shadow-primary/20 transition-all">保存本栏</button>
             </div>
         </section>

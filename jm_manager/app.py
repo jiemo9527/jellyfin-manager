@@ -13,7 +13,8 @@ from typing import Any
 import json
 import hashlib
 import requests
-from urllib.parse import urlparse
+from dataclasses import replace
+from urllib.parse import quote, urlparse
 
 import threading
 
@@ -31,6 +32,7 @@ from jm_manager.runtime_settings import RuntimeSettings, load_runtime_settings, 
 from jm_manager.telegram_notify import (
     NOTIFY_NONE,
     TELEGRAM_NOTIFY_TYPE_OPTIONS,
+    TELEGRAM_PUBLIC_NOTIFY_TYPE_OPTIONS,
     enabled_telegram_notify_types,
     enabled_telegram_public_notify_types,
     notify_user_created,
@@ -44,7 +46,8 @@ from jm_manager.telegram_notify import (
     notify_user_auto_deleted,
     notify_public_backup_result,
     notify_public_user_expiring,
-    notify_public_user_auto_disabled,
+    send_telegram_public_notification,
+    send_telegram_sensitive_message,
     notify_stream_usage_high,
 )
 from jm_manager.ban_rules_store import (
@@ -1333,11 +1336,6 @@ def _user_lifecycle_once(db: Db, rt: RuntimeSettings) -> dict[str, int]:
                         str(u.get("registration_date") or ""),
                         str(u.get("expiration_date") or ""),
                     )
-                    notify_public_user_auto_disabled(
-                        rt,
-                        username=username,
-                        expiration_date=str(u.get("expiration_date") or ""),
-                    )
                     _save_notify_cache(db, "disabled_notified", app.state.disabled_notified)
                 continue
 
@@ -1533,9 +1531,11 @@ def _run_nslookup(host: str) -> str:
 
 
 def _maybe_notify_stream_usage(rt: RuntimeSettings, items: list[dict[str, str]], db: Db) -> None:
-    if not rt.telegram_enabled:
+    if not rt.telegram_bot_token:
         return
-    if not rt.telegram_bot_token or not rt.telegram_user_id:
+    has_sensitive_target = rt.telegram_enabled and bool(rt.telegram_user_id)
+    has_public_target = rt.telegram_public_enabled and bool(rt.telegram_public_user_id)
+    if not (has_sensitive_target or has_public_target):
         return
     cache: dict[str, str] = getattr(app.state, "stream_usage_alerts", {})
     updated = False
@@ -1757,6 +1757,7 @@ def settings_get(
 
     saved = request.query_params.get("saved") == "1"
     error = request.query_params.get("error")
+    info = request.query_params.get("info")
     missing = runtime_missing(rt)
     # 提醒：Session secret 只能通过 env 设置
     if rt.web_password and not (settings.session_secret or os.getenv("JM_SESSION_SECRET", "")):
@@ -1774,6 +1775,7 @@ def settings_get(
             "request": request,
             "settings": rt,
             "saved": saved,
+            "info": info,
             "error": error,
             "missing": missing,
             "current_scope": current_scope,
@@ -1781,7 +1783,7 @@ def settings_get(
             "library_scan_items": scan_items,
             "device_cleanup_rules": device_cleanup_rules,
             "telegram_notify_options": TELEGRAM_NOTIFY_TYPE_OPTIONS,
-            "telegram_public_notify_options": TELEGRAM_NOTIFY_TYPE_OPTIONS,
+            "telegram_public_notify_options": TELEGRAM_PUBLIC_NOTIFY_TYPE_OPTIONS,
             "telegram_notify_enabled_types": enabled_telegram_notify_types(rt),
             "telegram_public_notify_enabled_types": enabled_telegram_public_notify_types(rt),
         },
@@ -1876,7 +1878,7 @@ async def settings_post(
         telegram_public_notify_types = [
             str(x)
             for x in form.getlist("JM_TELEGRAM_PUBLIC_NOTIFY_TYPES")
-            if str(x) in {str(item.get("key") or "") for item in TELEGRAM_NOTIFY_TYPE_OPTIONS}
+            if str(x) in {str(item.get("key") or "") for item in TELEGRAM_PUBLIC_NOTIFY_TYPE_OPTIONS}
         ]
         updates.update(
             {
@@ -2089,6 +2091,51 @@ async def settings_post(
     if redirect_scope:
         redirect_url += f"&scope={redirect_scope}"
     return RedirectResponse(url=redirect_url, status_code=303)
+
+
+@app.post("/settings/telegram-test")
+async def settings_telegram_test(
+    request: Request,
+    rt: RuntimeSettings = Depends(get_runtime_settings),
+) -> Any:
+    try:
+        require_session(rt, request)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+
+    form = await request.form()
+    channel = str(form.get("JM_TELEGRAM_TEST_CHANNEL") or "").strip()
+    clear_token = str(form.get("CLEAR_JM_TELEGRAM_BOT_TOKEN") or "").strip() != ""
+    form_token = str(form.get("JM_TELEGRAM_BOT_TOKEN") or "").strip()
+    test_rt = replace(
+        rt,
+        telegram_enabled=bool(str(form.get("JM_TELEGRAM_ENABLED") or "").strip()),
+        telegram_bot_token="" if clear_token else (form_token or rt.telegram_bot_token),
+        telegram_user_id=_dedupe_csv(str(form.get("JM_TELEGRAM_USER_ID") or "").strip()),
+        telegram_public_enabled=bool(str(form.get("JM_TELEGRAM_PUBLIC_ENABLED") or "").strip()),
+        telegram_public_user_id=_dedupe_csv(str(form.get("JM_TELEGRAM_PUBLIC_USER_ID") or "").strip()),
+    )
+
+    label = "敏感 / 管理员 Bot" if channel == "sensitive" else "非敏感"
+    msg = "\n".join(
+        [
+            "JM Manager Telegram 测试消息",
+            f"通道: {label}",
+            f"时间: {now_shanghai().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"版本: {APP_VERSION}",
+        ]
+    )
+    if channel == "sensitive":
+        ok = send_telegram_sensitive_message(test_rt, msg, sync=True)
+    elif channel == "public":
+        ok = send_telegram_public_notification(test_rt, msg, sync=True)
+    else:
+        return RedirectResponse(url="/settings?scope=telegram&error=未知测试通道", status_code=303)
+
+    if ok:
+        return RedirectResponse(url=f"/settings?scope=telegram&info={quote(f'{label} 测试消息已发送')}", status_code=303)
+    err_msg = f"{label} 测试消息发送失败，请检查启用状态、Bot Token 和 Chat ID"
+    return RedirectResponse(url=f"/settings?scope=telegram&error={quote(err_msg)}", status_code=303)
 
 
 @app.post("/settings/stream-servers/delete")
